@@ -379,6 +379,8 @@ module internal TokenClassifications =
         | WHEN
         | WHILE
         | WHILE_BANG
+        | IF_BANG
+        | FOR_BANG
         | WITH
         | IF
         | THEN
@@ -1265,6 +1267,8 @@ type FSharpTokenKind =
     | When
     | While
     | WhileBang
+    | IfBang
+    | ForBang
     | With
     | Hash
     | Ampersand
@@ -1465,6 +1469,8 @@ type FSharpToken =
         | WHEN -> FSharpTokenKind.When
         | WHILE -> FSharpTokenKind.While
         | WHILE_BANG -> FSharpTokenKind.WhileBang
+        | IF_BANG -> FSharpTokenKind.IfBang
+        | FOR_BANG -> FSharpTokenKind.ForBang
         | WITH -> FSharpTokenKind.With
         | HASH -> FSharpTokenKind.Hash
         | AMP -> FSharpTokenKind.Ampersand

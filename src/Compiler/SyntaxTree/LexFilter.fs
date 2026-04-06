@@ -1321,7 +1321,7 @@ type LexFilterImpl (
             | EOF _ -> false
             | _ ->
                 not (isSameLine()) ||
-                (match peekNextToken() with TRY | MATCH | MATCH_BANG | IF | LET _ | FOR | WHILE | WHILE_BANG -> true | _ -> false)
+                (match peekNextToken() with TRY | MATCH | MATCH_BANG | IF | IF_BANG | LET _ | FOR | FOR_BANG | WHILE | WHILE_BANG -> true | _ -> false)
 
         // Look for '=' or '.Id.id.id = ' after an identifier
         let rec isLongIdentEquals token =
@@ -2503,7 +2503,7 @@ type LexFilterImpl (
                 pushCtxtSeqBlock tokenTup AddBlockEnd
                 returnToken tokenLexbufState OELSE
 
-        | (ELIF | IF), _ ->
+        | (ELIF | IF | IF_BANG), _ ->
             if debug then dprintf "IF, pushing CtxtIf(%a)\n" outputPos tokenStartPos
             pushCtxt tokenTup (CtxtIf tokenStartPos)
             returnToken tokenLexbufState token
@@ -2513,7 +2513,7 @@ type LexFilterImpl (
             pushCtxt tokenTup (CtxtMatch tokenStartPos)
             returnToken tokenLexbufState token
 
-        | FOR, _ ->
+        | (FOR | FOR_BANG), _ ->
             if debug then dprintf "FOR, pushing CtxtFor(%a)\n" outputPos tokenStartPos
             pushCtxt tokenTup (CtxtFor tokenStartPos)
             returnToken tokenLexbufState token
