@@ -97,9 +97,19 @@
         <target state="translated">símbolo "..^"</target>
         <note />
       </trans-unit>
+      <trans-unit id="Parser.TOKEN.FOR.BANG">
+        <source>keyword 'for!'</source>
+        <target state="new">keyword 'for!'</target>
+        <note />
+      </trans-unit>
       <trans-unit id="Parser.TOKEN.GREATER.BAR.RBRACE">
         <source>symbol '&gt;|}'</source>
         <target state="new">symbol '&gt;|}'</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="Parser.TOKEN.IF.BANG">
+        <source>keyword 'if!'</source>
+        <target state="new">keyword 'if!'</target>
         <note />
       </trans-unit>
       <trans-unit id="Parser.TOKEN.RQUOTE.BAR.RBRACE">

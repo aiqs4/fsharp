@@ -68,6 +68,11 @@ type LanguageFeature =
     | WarningWhenTailRecAttributeButNonTailRecUsage
     | UnmanagedConstraintCsharpInterop
     | WhileBang
+    | IfBang
+    | ForBang
+    | WhileExpr
+    | ForExpr
+    | IfExpr
     | ReuseSameFieldsInStructUnions
     | ExtendedFixedBindings
     | PreferStringGetPinnableReference
