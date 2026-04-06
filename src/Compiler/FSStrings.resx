@@ -630,6 +630,9 @@
   <data name="Parser.TOKEN.FOR" xml:space="preserve">
     <value>keyword 'for'</value>
   </data>
+  <data name="Parser.TOKEN.FOR.BANG" xml:space="preserve">
+    <value>keyword 'for!'</value>
+  </data>
   <data name="Parser.TOKEN.FUN" xml:space="preserve">
     <value>keyword 'fun'</value>
   </data>
@@ -704,6 +707,9 @@
   </data>
   <data name="Parser.TOKEN.IF" xml:space="preserve">
     <value>keyword 'if'</value>
+  </data>
+  <data name="Parser.TOKEN.IF.BANG" xml:space="preserve">
+    <value>keyword 'if!'</value>
   </data>
   <data name="Parser.TOKEN.DO" xml:space="preserve">
     <value>keyword 'do'</value>

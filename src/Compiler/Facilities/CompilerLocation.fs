@@ -20,7 +20,14 @@ module internal FSharpEnvironment =
     let FSharpBannerVersion =
         UtilsStrings.SR.fSharpBannerVersion (FSharp.BuildProperties.fsProductVersion, FSharp.BuildProperties.fsLanguageVersion)
 
-    let FSharpProductName = UtilsStrings.SR.buildProductName (FSharpBannerVersion)
+    /// CE-Enhancements patch identifier — visible in `fsc --version` and the compiler banner.
+    /// Format: "Microsoft (R) F# Compiler version <base> [CE-Enhancements v1]"
+    /// The base version ties this build back to the upstream SDK release it was branched from.
+    [<Literal>]
+    let CEEnhancementsSuffix = " [CE-Enhancements v1]"
+
+    let FSharpProductName =
+        UtilsStrings.SR.buildProductName (FSharpBannerVersion) + CEEnhancementsSuffix
 
     let versionOf<'t> : (string | null) =
         match typeof<'t>.Assembly.GetName().Version with

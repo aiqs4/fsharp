@@ -1295,9 +1295,6 @@ let rec TryTranslateComputationExpression
                 | Some e -> e
                 | None -> sourceExpr
 
-            let wrappedSourceExpr =
-                mkSourceExprConditional isFromSource sourceExpr ceenv.sourceMethInfo ceenv.builderValName
-
             let mFor =
                 match spFor with
                 | DebugPointAtFor.Yes m -> m.NoteSourceConstruct(NotedSourceConstruct.For)
@@ -1315,46 +1312,122 @@ let rec TryTranslateComputationExpression
 
             let mPat = pat.Range
 
-            requireBuilderMethod "For" ceenv mFor mFor
+            // ForExpr builder method (preferred when present):
+            //   builder.ForExpr(collection, fun pat -> body)
+            //   Skips Source() wrapping; the builder controls the collection type entirely.
+            if
+                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.ForExpr
+                && hasBuilderMethod ceenv mFor "ForExpr"
+            then
+                // Add the variables to the query variable space, on demand
+                let varSpace =
+                    addVarsToVarSpace varSpace (fun _mCustomOp env ->
+                        use _holder = TemporarilySuspendReportingTypecheckResultsToSink cenv.tcSink
 
-            // Add the variables to the query variable space, on demand
-            let varSpace =
-                addVarsToVarSpace varSpace (fun _mCustomOp env ->
-                    use _holder = TemporarilySuspendReportingTypecheckResultsToSink cenv.tcSink
+                        let _, _, vspecs, envinner, _ =
+                            TcMatchPattern cenv (NewInferenceType cenv.g) env ceenv.tpenv pat None TcTrueMatchClause.No
 
-                    let _, _, vspecs, envinner, _ =
-                        TcMatchPattern cenv (NewInferenceType cenv.g) env ceenv.tpenv pat None TcTrueMatchClause.No
+                        vspecs, envinner)
 
-                    vspecs, envinner)
+                Some(
+                    TranslateComputationExpression
+                        (noTailCall ceenv)
+                        CompExprTranslationPass.Initial
+                        q
+                        varSpace
+                        innerComp
+                        (fun innerCompR ->
 
-            Some(
-                TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun innerCompR ->
-
-                    let forCall =
-                        mkSynCall
-                            "For"
-                            mFor
-                            [
-                                wrappedSourceExpr
-                                SynExpr.MatchLambda(
-                                    false,
-                                    mPat,
-                                    [
-                                        SynMatchClause(pat, None, innerCompR, mPat, DebugPointAtTarget.Yes, SynMatchClauseTrivia.Zero)
-                                    ],
-                                    DebugPointAtBinding.NoneAtInvisible,
+                            let forCall =
+                                mkSynCall
+                                    "ForExpr"
                                     mFor
-                                )
-                            ]
-                            ceenv.builderValName
+                                    [
+                                        sourceExpr
+                                        SynExpr.MatchLambda(
+                                            false,
+                                            mPat,
+                                            [
+                                                SynMatchClause(
+                                                    pat,
+                                                    None,
+                                                    innerCompR,
+                                                    mPat,
+                                                    DebugPointAtTarget.Yes,
+                                                    SynMatchClauseTrivia.Zero
+                                                )
+                                            ],
+                                            DebugPointAtBinding.NoneAtInvisible,
+                                            mFor
+                                        )
+                                    ]
+                                    ceenv.builderValName
 
-                    let forCall =
-                        match spFor with
-                        | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes(false, mFor), false, forCall)
-                        | DebugPointAtFor.No -> forCall
+                            let forCall =
+                                match spFor with
+                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
+                                | DebugPointAtFor.No -> forCall
 
-                    translatedCtxt forCall)
-            )
+                            translatedCtxt forCall)
+                )
+            else
+                // Existing path: builder.For(Source(collection), fun pat -> body)
+                let wrappedSourceExpr =
+                    mkSourceExprConditional isFromSource sourceExpr ceenv.sourceMethInfo ceenv.builderValName
+
+                requireBuilderMethod "For" ceenv mFor mFor
+
+                // Add the variables to the query variable space, on demand
+                let varSpace =
+                    addVarsToVarSpace varSpace (fun _mCustomOp env ->
+                        use _holder = TemporarilySuspendReportingTypecheckResultsToSink cenv.tcSink
+
+                        let _, _, vspecs, envinner, _ =
+                            TcMatchPattern cenv (NewInferenceType cenv.g) env ceenv.tpenv pat None TcTrueMatchClause.No
+
+                        vspecs, envinner)
+
+                Some(
+                    TranslateComputationExpression
+                        (noTailCall ceenv)
+                        CompExprTranslationPass.Initial
+                        q
+                        varSpace
+                        innerComp
+                        (fun innerCompR ->
+
+                            let forCall =
+                                mkSynCall
+                                    "For"
+                                    mFor
+                                    [
+                                        wrappedSourceExpr
+                                        SynExpr.MatchLambda(
+                                            false,
+                                            mPat,
+                                            [
+                                                SynMatchClause(
+                                                    pat,
+                                                    None,
+                                                    innerCompR,
+                                                    mPat,
+                                                    DebugPointAtTarget.Yes,
+                                                    SynMatchClauseTrivia.Zero
+                                                )
+                                            ],
+                                            DebugPointAtBinding.NoneAtInvisible,
+                                            mFor
+                                        )
+                                    ]
+                                    ceenv.builderValName
+
+                            let forCall =
+                                match spFor with
+                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
+                                | DebugPointAtFor.No -> forCall
+
+                            translatedCtxt forCall)
+                )
 
         | SynExpr.For(
             forDebugPoint = spFor
@@ -1388,28 +1461,49 @@ let rec TryTranslateComputationExpression
             if ceenv.isQuery then
                 error (Error(FSComp.SR.tcNoWhileInQuery (), mWhile))
 
-            requireBuilderMethod "While" ceenv mWhile mWhile
-            requireBuilderMethod "Delay" ceenv mWhile mWhile
-
             // 'while' is hit just before each time the guard is called
             let guardExpr =
                 match spWhile with
                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes(false, mWhile), false, guardExpr)
                 | DebugPointAtWhile.No -> guardExpr
 
-            Some(
-                TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+             // Path A: New WhileExprDirect method (Strict/Direct evaluation for AST builders)
+            if hasBuilderMethod ceenv mWhile "WhileExprDirect" then
+                let bodyTranslated = TranslateComputationExpressionNoQueryOps ceenv innerComp
+                Some(
                     translatedCtxt (
-                        mkSynCall
-                            "While"
-                            mWhile
-                            [
-                                mkSynDelay2 guardExpr
-                                mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
-                            ]
-                            ceenv.builderValName
-                    ))
-            )
+                        mkSynCall "WhileExprDirect" mWhile [ guardExpr; bodyTranslated ] ceenv.builderValName
+                    )
+                )
+
+            // Path B: Custom WhileBang method (High-performance or carrier-free while! loop)
+            elif hasBuilderMethod ceenv mWhile "WhileBang" then
+                let bodyTranslated = TranslateComputationExpressionNoQueryOps ceenv innerComp
+                let bodyDelayed = mkSynDelay mWhile bodyTranslated
+                Some(
+                    translatedCtxt (
+                        mkSynCall "WhileBang" mWhile [ guardExpr; bodyDelayed ] ceenv.builderValName
+                    )
+                )
+
+            // Path C: Standard While loop
+            else
+                requireBuilderMethod "While" ceenv mWhile mWhile
+                requireBuilderMethod "Delay" ceenv mWhile mWhile
+
+                Some(
+                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+                        translatedCtxt (
+                            mkSynCall
+                                "While"
+                                mWhile
+                                [
+                                    mkSynDelay2 guardExpr
+                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
+                                ]
+                                ceenv.builderValName
+                        ))
+                )
 
         | SynExpr.WhileBang(spWhile, guardExpr, innerComp, mOrig) ->
             let mGuard = guardExpr.Range
@@ -1421,99 +1515,115 @@ let rec TryTranslateComputationExpression
 
             let mGuard = mGuard.MakeSynthetic()
 
+            if ceenv.isQuery then
+                error (Error(FSComp.SR.tcNoWhileInQuery (), mWhile))
+
             // 'while!' is hit just before each time the guard is called
             let guardExpr =
                 match spWhile with
                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes(false, mWhile), false, guardExpr)
                 | DebugPointAtWhile.No -> guardExpr
 
-            let rewrittenWhileExpr =
-                let idFirst = mkSynId mGuard (CompilerGeneratedName "first")
-                let patFirst = mkSynPatVar None idFirst
+            // TODO: check with upstream !!! there was some change on rebase
+            // while! desugaring follows the builder method dispatch principle:
+            //
+            // Path 1 — WhileBang builder method (preferred):
+            //   builder.WhileBang(builder.Source(guard), builder.Delay(fun () -> body))
+            //   The builder controls the guard type entirely; no bool constraint.
+            //   Analogous to how TryFinally/TryWith receive pre-translated bodies.
+            //
+            // Path 2 — Bind/Combine/Zero fallback (backward compatible):
+            //   let rec loop () =
+            //       builder.Bind(builder.Source(guard), fun res ->
+            //           if res then builder.Combine(body, builder.Delay(loop))
+            //           else builder.Zero())
+            //   loop ()
+            //   This requires the guard to produce bool (due to the if/else dispatch).
+            if hasBuilderMethod ceenv mWhile "WhileBang" then
+                requireBuilderMethod "Delay" ceenv mWhile mWhile
 
-                let body =
-                    let idCond = mkSynId mGuard (CompilerGeneratedName "cond")
-                    let patCond = mkSynPatVar None idCond
+                let sourceExpr = mkSourceExpr guardExpr ceenv.sourceMethInfo ceenv.builderValName
 
-                    let condBinding =
-                        mkSynBinding
-                            (PreXmlDoc.Empty, patCond)
-                            (None,
-                             false,
-                             true,
-                             mGuard,
-                             DebugPointAtBinding.NoneAtSticky,
-                             None,
-                             SynExpr.Ident idFirst,
-                             mGuard,
-                             [],
-                             [],
-                             None,
-                             SynBindingTrivia.Zero)
+                Some(
+                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+                        translatedCtxt (
+                            mkSynCall
+                                "WhileBang"
+                                mWhile
+                                [
+                                    sourceExpr
+                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
+                                ]
+                                ceenv.builderValName
+                        ))
+                )
+            else
+                requireBuilderMethod "Bind" ceenv mWhile mWhile
+                requireBuilderMethod "Combine" ceenv mWhile mWhile
+                requireBuilderMethod "Zero" ceenv mWhile mWhile
 
-                    let setCondExpr = SynExpr.Set(SynExpr.Ident idCond, SynExpr.Ident idFirst, mGuard)
+                let translatedBody = TranslateComputationExpressionNoQueryOps ceenv innerComp
+                let inputExpr = mkSourceExpr guardExpr ceenv.sourceMethInfo ceenv.builderValName
+                let idLoop = mkSynId mGuard (CompilerGeneratedName "whileLoop")
+                let idRes = mkSynId mGuard (CompilerGeneratedName "res")
 
                     let binding =
-                        SynBinding(
-                            accessibility = None,
-                            kind = SynBindingKind.Normal,
-                            isInline = false,
-                            isMutable = false,
-                            attributes = [],
-                            xmlDoc = PreXmlDoc.Empty,
-                            valData = SynInfo.emptySynValData,
-                            headPat = patFirst,
-                            returnInfo = None,
-                            expr = guardExpr,
-                            range = guardExpr.Range,
-                            debugPoint = DebugPointAtBinding.NoneAtSticky,
-                            trivia =
-                                { SynBindingTrivia.Zero with
-                                    LeadingKeyword = SynLeadingKeyword.LetBang mGuard
-                                }
-                        )
+                        mkSynLetBangBinding mGuard patFirst guardExpr DebugPointAtBinding.NoneAtSticky guardExpr.Range
 
-                    let bindCondExpr =
-                        SynExpr.LetOrUse
-                            {
-                                IsRecursive = false
-                                // isUse = false,
-                                IsFromSource = true // compiler generated during desugaring
-                                // isBang = true,
-                                Bindings = [ binding ]
-                                Body = setCondExpr
-                                Range = mGuard
-                                Trivia = SynLetOrUseTrivia.Zero
-                            }
+                // builder.Delay(fun () -> __whileLoop ()) or just __whileLoop ()
+                let delayedLoopCall =
+                    match tryFindBuilderMethod ceenv mWhile "Delay" with
+                    | [] -> loopCall
+                    | _ -> mkSynCall "Delay" mWhile [ mkSynDelay mGuard loopCall ] ceenv.builderValName
 
-                    let whileExpr =
-                        SynExpr.While(
-                            DebugPointAtWhile.No,
-                            SynExpr.Ident idCond,
-                            SynExpr.Sequential(
-                                DebugPointAtSequential.SuppressBoth,
-                                true,
-                                innerComp,
-                                bindCondExpr,
-                                mWhile,
-                                SynExprSequentialTrivia.Zero
-                            ),
-                            mOrig
-                        )
+                // builder.Combine(translatedBody, delayedLoopCall)
+                let combineExpr =
+                    mkSynCall "Combine" mWhile [ translatedBody; delayedLoopCall ] ceenv.builderValName
 
-                    SynExpr.LetOrUse
+                // builder.Zero()
+                let zeroExpr = mkSynCall "Zero" mWhile [] ceenv.builderValName
+
+                // if __res then combineExpr else zeroExpr
+                let ifExpr =
+                    let trivia =
                         {
-                            IsRecursive = false
-                            // isUse = false,
-                            IsFromSource = false // compiler generated during desugaring
-                            // isBang = false,
-                            Bindings = [ condBinding ]
-                            Body = whileExpr
-                            Range = mGuard
-                            Trivia = SynLetOrUseTrivia.Zero
+                            IfKeyword = mGuard
+                            IsElif = false
+                            ThenKeyword = mGuard
+                            ElseKeyword = Some mGuard
+                            IfToThenRange = mGuard
                         }
 
-                let binding =
+                    SynExpr.IfThenElse(
+                        SynExpr.Ident idRes,
+                        combineExpr,
+                        Some zeroExpr,
+                        DebugPointAtBinding.NoneAtSticky,
+                        false,
+                        mOrig,
+                        trivia
+                    )
+
+                // fun __res -> ifExpr
+                let consumeExpr =
+                    mkSynLambda
+                        (SynSimplePats.SimplePats([ SynSimplePat.Id(idRes, None, false, false, false, mGuard) ], [], mGuard))
+                        ifExpr
+                        mOrig
+
+                // builder.Bind(guard, consumeExpr)
+                let spBind =
+                    match spWhile with
+                    | DebugPointAtWhile.Yes m -> DebugPointAtBinding.Yes m
+                    | DebugPointAtWhile.No -> DebugPointAtBinding.NoneAtSticky
+
+                let bindExpr =
+                    mkSynCall "Bind" mWhile [ inputExpr; consumeExpr ] ceenv.builderValName
+                    |> addBindDebugPoint spBind
+
+                let loopBody = mkSynDelay mGuard bindExpr
+
+                let loopBinding =
                     SynBinding(
                         accessibility = None,
                         kind = SynBindingKind.Normal,
@@ -1522,16 +1632,27 @@ let rec TryTranslateComputationExpression
                         attributes = [],
                         xmlDoc = PreXmlDoc.Empty,
                         valData = SynInfo.emptySynValData,
-                        headPat = patFirst,
+                        headPat = mkSynPatVar None idLoop,
                         returnInfo = None,
-                        expr = guardExpr,
-                        range = guardExpr.Range,
+                        expr = loopBody,
+                        range = mGuard,
                         debugPoint = DebugPointAtBinding.NoneAtSticky,
-                        trivia =
-                            { SynBindingTrivia.Zero with
-                                LeadingKeyword = SynLeadingKeyword.LetBang mGuard
-                            }
+                        trivia = SynBindingTrivia.Zero
                     )
+
+                let whileExpr =
+                    SynExpr.LetOrUse
+                        {
+                            IsRecursive = true
+                            IsFromSource = false
+                            Bindings = [ loopBinding ]
+                            Body = loopCall
+                            Range = mOrig
+                            Trivia = SynLetOrUseTrivia.Zero
+                        }
+
+                let binding =
+                    mkSynLetBangBinding mGuard patFirst guardExpr DebugPointAtBinding.NoneAtSticky guardExpr.Range
 
                 SynExpr.LetOrUse
                     {
@@ -1804,36 +1925,111 @@ let rec TryTranslateComputationExpression
                         )
 
         | SynExpr.IfThenElse(guardExpr, thenComp, elseCompOpt, spIfToThen, isRecovery, mIfToEndOfElseBranch, trivia) ->
-            match elseCompOpt with
-            | Some elseComp ->
-                if ceenv.isQuery then
-                    error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
+            // Path A: New IfExprDirect method (Preferred for strict, carrier-free AST builders)
+            //   builder.IfExprDirect(guard, thenBody, elseBody)
+            //   Branches are translated directly without Delay wrapping. Zero breaking changes.
+            if hasBuilderMethod ceenv trivia.IfToThenRange "IfExprDirect" then
+                match elseCompOpt with
+                | Some elseComp ->
+                    if ceenv.isQuery then
+                        error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
 
-                Some(
-                    translatedCtxt (
-                        SynExpr.IfThenElse(
-                            guardExpr,
-                            TranslateComputationExpressionNoQueryOps ceenv thenComp,
-                            Some(TranslateComputationExpressionNoQueryOps ceenv elseComp),
-                            spIfToThen,
-                            isRecovery,
-                            mIfToEndOfElseBranch,
-                            trivia
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
+
+                    Some(
+                        translatedCtxt (
+                            mkSynCall "IfExprDirect" trivia.IfToThenRange [ guardExpr; thenTranslated; elseTranslated ] ceenv.builderValName
                         )
                     )
-                )
-            | None ->
-                let elseComp =
+                | None ->
                     requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
 
-                    mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let zeroExpr = mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
 
-                Some(
-                    TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun holeFill ->
+                    Some(
                         translatedCtxt (
-                            SynExpr.IfThenElse(guardExpr, holeFill, Some elseComp, spIfToThen, isRecovery, mIfToEndOfElseBranch, trivia)
-                        ))
-                )
+                            mkSynCall "IfExprDirect" trivia.IfToThenRange [ guardExpr; thenTranslated; zeroExpr ] ceenv.builderValName
+                        )
+                    )
+
+            // Path B: Existing IfExpr method (Preserved for backwards-compatible Query/LINQ builders)
+            //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Delay(fun () -> elseBody))
+            elif
+                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.IfExpr
+                && hasBuilderMethod ceenv trivia.IfToThenRange "IfExpr"
+            then
+                match elseCompOpt with
+                | Some elseComp ->
+                    if ceenv.isQuery then
+                        error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
+
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
+                    
+                    Some(
+                        translatedCtxt (
+                            let thenDelayed = mkSynDelay trivia.IfToThenRange thenTranslated
+                            let elseDelayed = mkSynDelay mIfToEndOfElseBranch elseTranslated
+                            mkSynCall "IfExpr" mIfToEndOfElseBranch [ guardExpr; thenDelayed; elseDelayed ] ceenv.builderValName
+                        )
+                    )
+                | None ->
+                    requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
+
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let zeroExpr = mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
+
+                    Some(
+                        translatedCtxt (
+                            let thenDelayed = mkSynDelay trivia.IfToThenRange thenTranslated
+                            let zeroDelayed = mkSynDelay trivia.IfToThenRange zeroExpr
+                            mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; zeroDelayed ] ceenv.builderValName
+                        )
+                    )
+
+            // Path C: Standard F# conditional desugaring
+            else
+                // Existing path: standard if/then/else desugaring
+                match elseCompOpt with
+                | Some elseComp ->
+                    if ceenv.isQuery then
+                        error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
+
+                    Some(
+                        translatedCtxt (
+                            SynExpr.IfThenElse(
+                                guardExpr,
+                                TranslateComputationExpressionNoQueryOps ceenv thenComp,
+                                Some(TranslateComputationExpressionNoQueryOps ceenv elseComp),
+                                spIfToThen,
+                                isRecovery,
+                                mIfToEndOfElseBranch,
+                                trivia
+                            )
+                        )
+                    )
+                | None ->
+                    let elseComp =
+                        requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
+
+                        mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
+
+                    Some(
+                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun holeFill ->
+                            translatedCtxt (
+                                SynExpr.IfThenElse(
+                                    guardExpr,
+                                    holeFill,
+                                    Some elseComp,
+                                    spIfToThen,
+                                    isRecovery,
+                                    mIfToEndOfElseBranch,
+                                    trivia
+                                )
+                            ))
+                    )
 
         // 'let binds in expr'
         | LetOrUse({
@@ -2652,8 +2848,7 @@ and TranslateComputationExpressionBind
 
     let innerRange = innerComp.Range
 
-    let innerCompReturn =
-        if ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.AndBang then
+    let innerCompReturn = convertSimpleReturnToExpr ceenv comp varSpace innerComp
             convertSimpleReturnToExpr ceenv comp varSpace innerComp
         else
             None
@@ -2699,6 +2894,23 @@ and TranslateComputationExpressionBind
                     DebugPointAtBinding.NoneAtInvisible,
                     innerRange
                 )
+
+            // When consumePat is a unit pattern (from do! desugaring), wrap the continuation lambda
+            // in a type annotation (unit -> _) so overload resolution can disambiguate between
+            // Bind(M, unit -> M) and Bind(M, Expr -> M) without hitting FS0041.
+            let consumeExpr =
+                if isUnitPatBinding then
+                    let unitTy =
+                        SynType.LongIdent(SynLongIdent([ mkSynId consumePat.Range "unit" ], [], [ None ]))
+
+                    let varTy = SynType.Anon(consumePat.Range)
+
+                    let funTy =
+                        SynType.Fun(unitTy, varTy, consumePat.Range, { ArrowRange = consumePat.Range })
+
+                    SynExpr.Typed(consumeExpr, funTy, consumeExpr.Range)
+                else
+                    consumeExpr
 
             let bindCall =
                 mkSynCall bindName holeFill.Range (bindArgs @ [ consumeExpr ]) ceenv.builderValName
