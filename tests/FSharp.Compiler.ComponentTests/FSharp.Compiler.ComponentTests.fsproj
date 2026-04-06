@@ -344,6 +344,7 @@
     <Compile Include="Language\FixedBindings\FixedBindings.fs" />
     <Compile Include="Language\ExtensionMethodTests.fs" />
     <Compile Include="Language\WhileBangTests.fs" />
+    <Compile Include="Language\CEEnhancementsTests.fs" />
     <Compile Include="Language\StaticClassTests.fs" />
     <Compile Include="Language\PrintfFormatTests.fs" />
     <Compile Include="Language\InterfaceTests.fs" />
