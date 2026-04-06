@@ -2625,8 +2625,18 @@ and TranslateComputationExpressionBind
 
     let innerRange = innerComp.Range
 
+    // Detect if consumePat is a unit pattern — this means the binding came from a do! desugaring.
+    // When the continuation is unit->unit (from do! producing `let! () = e in return ()`),
+    // BindReturn would create BindReturn(e, fun () -> ()) which has type unit->unit.
+    // If the builder's BindReturn expects a non-unit continuation (e.g. Expr -> Expr),
+    // this causes FS0001. Fall back to Bind + Return in this case.
+    let isUnitPatBinding =
+        match consumePat with
+        | SynPat.Const(SynConst.Unit, _) -> true
+        | _ -> false
+
     let innerCompReturn =
-        if ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.AndBang then
+        if ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.AndBang && not isUnitPatBinding then
             convertSimpleReturnToExpr ceenv comp varSpace innerComp
         else
             None
