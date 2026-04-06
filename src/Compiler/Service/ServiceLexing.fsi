@@ -443,6 +443,8 @@ type public FSharpTokenKind =
     | When
     | While
     | WhileBang
+    | IfBang
+    | ForBang
     | With
     | Hash
     | Ampersand
