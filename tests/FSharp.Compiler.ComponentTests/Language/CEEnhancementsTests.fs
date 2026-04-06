@@ -317,3 +317,178 @@ let test () = seq {
         """
         |> typecheck
         |> shouldSucceed
+
+    // ---------------------------------------------------------------
+    // Full AST builder — exercises all CE enhancements together
+    // ---------------------------------------------------------------
+
+    [<Fact>]
+    let ``Full AST builder — mixed let! do! and! with overloaded Bind and BindReturn`` () =
+        FSharp """
+module Test
+
+type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
+
+type Builder() =
+    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
+    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
+    member _.Return(e: Expr) = e
+    member _.Return(_: unit) = Nop
+    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
+    member _.MergeSources(a: Expr, b: Expr) = Seq [a; b]
+    member _.Zero() = Nop
+    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
+    member _.Delay(f: unit -> Expr) = f()
+    member _.Run(e: Expr) = e
+
+let b = Builder()
+
+// Mixed let! and do! — do! must use Bind(unit->Expr), not BindReturn
+let r1 = b {
+    let! x = C 1
+    do! Assign("a", x)
+    return x
+}
+
+// let! chain — inner let! uses BindReturn optimization
+let r2 = b {
+    let! x = C 1
+    let! y = C 2
+    return Seq [x; y]
+}
+
+// and! with Bind2Return (the user's workaround for non-tuple MergeSources)
+let r3 = b {
+    let! x = C 1
+    let! y = C 2
+    return x
+}
+
+// do! only — the original BindReturn poisoning repro
+let r4 = b {
+    do! Assign("a", C 1)
+    do! Assign("b", C 2)
+}
+
+// let! followed by do! at final position
+let r5 = b {
+    let! x = C 1
+    do! Assign("a", x)
+}
+        """
+        |> typecheck
+        |> shouldSucceed
+
+    [<Fact>]
+    let ``Full AST builder — executes correctly at runtime`` () =
+        FSharp """
+module Test
+
+type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
+
+type Builder() =
+    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
+    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
+    member _.Return(e: Expr) = e
+    member _.Return(_: unit) = Nop
+    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
+    member _.MergeSources(a: Expr, b: Expr) = Seq [a; b]
+    member _.Zero() = Nop
+    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
+    member _.Delay(f: unit -> Expr) = f()
+    member _.Run(e: Expr) = e
+
+let b = Builder()
+
+// do! only test
+let r = b {
+    do! Assign("a", C 1)
+    do! Assign("b", C 2)
+}
+
+// Verify the structure — Bind(unit->Expr) produces Seq, not Let
+match r with
+| Seq _ -> printfn "PASS: do! used Bind(unit->Expr) overload"
+| Let _ -> printfn "FAIL: do! incorrectly used BindReturn"
+| _ -> printfn "FAIL: unexpected structure %A" r
+        """
+        |> asExe
+        |> compileExeAndRun
+        |> shouldSucceed
+        |> withStdOutContains "PASS"
+
+    // ---------------------------------------------------------------
+    // FS0041 Overload Ambiguity — builder with dual BindReturn overloads  
+    // ---------------------------------------------------------------
+
+    [<Fact>]
+    let ``FS0041 — BindReturn with unit overload does not cause ambiguity for let! return`` () =
+        FSharp """
+module Test
+
+type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
+
+type Builder() =
+    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
+    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
+    member _.Return(e: Expr) = e
+    member _.Return(_: unit) = Nop
+    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
+    member _.BindReturn(x: Expr, f: unit -> Expr) = Seq [x; f()]
+    member _.Zero() = Nop
+    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
+    member _.Delay(f: unit -> Expr) = f()
+    member _.Run(e: Expr) = e
+
+let b = Builder()
+
+// This should resolve to BindReturn(Expr, Expr -> Expr) without FS0041
+let r1 = b {
+    let! x = C 42
+    return x
+}
+
+// do! should still use Bind(unit->Expr) path 
+let r2 = b {
+    do! Assign("a", C 1)
+    do! Assign("b", C 2)
+}
+
+// let! + do! in same CE
+let r3 = b {
+    let! x = C 1
+    do! Assign("a", x)
+    return x
+}
+        """
+        |> typecheck
+        |> shouldSucceed
+
+    [<Fact>]
+    let ``FS0041 — overloaded Bind does not cause ambiguity in non-final do!`` () =
+        FSharp """
+module Test
+
+type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
+
+type Builder() =
+    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
+    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
+    member _.Return(e: Expr) = e
+    member _.Return(_: unit) = Nop
+    member _.Zero() = Nop
+    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
+    member _.Delay(f: unit -> Expr) = f()
+    member _.Run(e: Expr) = e
+
+let b = Builder()
+
+// do! in non-final position — must select Bind(unit->Expr)
+let r = b {
+    do! Assign("a", C 1)
+    let! x = C 2
+    return x
+}
+        """
+        |> typecheck
+        |> shouldSucceed

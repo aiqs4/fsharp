@@ -2684,6 +2684,18 @@ and TranslateComputationExpressionBind
                     innerRange
                 )
 
+            // When consumePat is a unit pattern (from do! desugaring), wrap the continuation lambda
+            // in a type annotation (unit -> _) so overload resolution can disambiguate between
+            // Bind(M, unit -> M) and Bind(M, Expr -> M) without hitting FS0041.
+            let consumeExpr =
+                if isUnitPatBinding then
+                    let unitTy = SynType.LongIdent(SynLongIdent([ mkSynId consumePat.Range "unit" ], [], [ None ]))
+                    let varTy = SynType.Anon(consumePat.Range)
+                    let funTy = SynType.Fun(unitTy, varTy, consumePat.Range, { ArrowRange = consumePat.Range })
+                    SynExpr.Typed(consumeExpr, funTy, consumeExpr.Range)
+                else
+                    consumeExpr
+
             let bindCall =
                 mkSynCall bindName holeFill.Range (bindArgs @ [ consumeExpr ]) ceenv.builderValName
 
