@@ -1415,131 +1415,112 @@ let rec TryTranslateComputationExpression
 
             let mGuard = mGuard.MakeSynthetic()
 
+            if ceenv.isQuery then
+                error (Error(FSComp.SR.tcNoWhileInQuery (), mWhile))
+
+            requireBuilderMethod "Bind" ceenv mWhile mWhile
+            requireBuilderMethod "Combine" ceenv mWhile mWhile
+            requireBuilderMethod "Zero" ceenv mWhile mWhile
+
             // 'while!' is hit just before each time the guard is called
             let guardExpr =
                 match spWhile with
                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mWhile, false, guardExpr)
                 | DebugPointAtWhile.No -> guardExpr
 
-            let rewrittenWhileExpr =
-                let idFirst = mkSynId mGuard (CompilerGeneratedName "first")
-                let patFirst = mkSynPatVar None idFirst
+            // Desugar while! guard do body to:
+            //   let rec __whileLoop () =
+            //       builder.Bind(guard, fun __res ->
+            //           if __res then
+            //               builder.Combine(translatedBody, builder.Delay(fun () -> __whileLoop ()))
+            //           else
+            //               builder.Zero())
+            //   __whileLoop ()
 
-                let body =
-                    let idCond = mkSynId mGuard (CompilerGeneratedName "cond")
-                    let patCond = mkSynPatVar None idCond
+            let translatedBody = TranslateComputationExpressionNoQueryOps ceenv innerComp
 
-                    let condBinding =
-                        mkSynBinding
-                            (PreXmlDoc.Empty, patCond)
-                            (None,
-                             false,
-                             true,
-                             mGuard,
-                             DebugPointAtBinding.NoneAtSticky,
-                             None,
-                             SynExpr.Ident idFirst,
-                             mGuard,
-                             [],
-                             [],
-                             None,
-                             SynBindingTrivia.Zero)
+            let inputExpr = mkSourceExpr guardExpr ceenv.sourceMethInfo ceenv.builderValName
 
-                    let setCondExpr = SynExpr.Set(SynExpr.Ident idCond, SynExpr.Ident idFirst, mGuard)
+            let idLoop = mkSynId mGuard (CompilerGeneratedName "whileLoop")
+            let idRes = mkSynId mGuard (CompilerGeneratedName "res")
 
-                    let binding =
-                        SynBinding(
-                            accessibility = None,
-                            kind = SynBindingKind.Normal,
-                            isInline = false,
-                            isMutable = false,
-                            attributes = [],
-                            xmlDoc = PreXmlDoc.Empty,
-                            valData = SynInfo.emptySynValData,
-                            headPat = patFirst,
-                            returnInfo = None,
-                            expr = guardExpr,
-                            range = guardExpr.Range,
-                            debugPoint = DebugPointAtBinding.NoneAtSticky,
-                            trivia =
-                                { SynBindingTrivia.Zero with
-                                    LeadingKeyword = SynLeadingKeyword.LetBang mGuard
-                                }
-                        )
+            // __whileLoop ()
+            let loopCall =
+                mkSynApp1 (SynExpr.Ident idLoop) (SynExpr.Const(SynConst.Unit, mGuard)) mGuard
 
-                    let bindCondExpr =
-                        SynExpr.LetOrUse
-                            {
-                                IsRecursive = false
-                                // isUse = false,
-                                IsFromSource = true // compiler generated during desugaring
-                                // isBang = true,
-                                Bindings = [ binding ]
-                                Body = setCondExpr
-                                Range = mGuard
-                                Trivia = SynLetOrUseTrivia.Zero
-                            }
+            // builder.Delay(fun () -> __whileLoop ()) or just __whileLoop ()
+            let delayedLoopCall =
+                match tryFindBuilderMethod ceenv mWhile "Delay" with
+                | [] -> loopCall
+                | _ -> mkSynCall "Delay" mWhile [ mkSynDelay mGuard loopCall ] ceenv.builderValName
 
-                    let whileExpr =
-                        SynExpr.While(
-                            DebugPointAtWhile.No,
-                            SynExpr.Ident idCond,
-                            SynExpr.Sequential(
-                                DebugPointAtSequential.SuppressBoth,
-                                true,
-                                innerComp,
-                                bindCondExpr,
-                                mWhile,
-                                SynExprSequentialTrivia.Zero
-                            ),
-                            mOrig
-                        )
+            // builder.Combine(translatedBody, delayedLoopCall)
+            let combineExpr =
+                mkSynCall "Combine" mWhile [ translatedBody; delayedLoopCall ] ceenv.builderValName
 
-                    SynExpr.LetOrUse
-                        {
-                            IsRecursive = false
-                            // isUse = false,
-                            IsFromSource = false // compiler generated during desugaring
-                            // isBang = false,
-                            Bindings = [ condBinding ]
-                            Body = whileExpr
-                            Range = mGuard
-                            Trivia = SynLetOrUseTrivia.Zero
-                        }
+            // builder.Zero()
+            let zeroExpr = mkSynCall "Zero" mWhile [] ceenv.builderValName
 
-                let binding =
-                    SynBinding(
-                        accessibility = None,
-                        kind = SynBindingKind.Normal,
-                        isInline = false,
-                        isMutable = false,
-                        attributes = [],
-                        xmlDoc = PreXmlDoc.Empty,
-                        valData = SynInfo.emptySynValData,
-                        headPat = patFirst,
-                        returnInfo = None,
-                        expr = guardExpr,
-                        range = guardExpr.Range,
-                        debugPoint = DebugPointAtBinding.NoneAtSticky,
-                        trivia =
-                            { SynBindingTrivia.Zero with
-                                LeadingKeyword = SynLeadingKeyword.LetBang mGuard
-                            }
-                    )
+            // if __res then combineExpr else zeroExpr
+            let ifExpr =
+                let trivia =
+                    {
+                        IfKeyword = mGuard
+                        IsElif = false
+                        ThenKeyword = mGuard
+                        ElseKeyword = Some mGuard
+                        IfToThenRange = mGuard
+                    }
 
+                SynExpr.IfThenElse(SynExpr.Ident idRes, combineExpr, Some zeroExpr, DebugPointAtBinding.NoneAtSticky, false, mOrig, trivia)
+
+            // fun __res -> ifExpr
+            let consumeExpr = mkSynLambda (SynSimplePats.SimplePats([ SynSimplePat.Id(idRes, None, false, false, false, mGuard) ], [], mGuard)) ifExpr mOrig
+
+            // builder.Bind(guard, consumeExpr)
+            let spBind =
+                match spWhile with
+                | DebugPointAtWhile.Yes m -> DebugPointAtBinding.Yes m
+                | DebugPointAtWhile.No -> DebugPointAtBinding.NoneAtSticky
+
+            let bindExpr =
+                mkSynCall "Bind" mWhile [ inputExpr; consumeExpr ] ceenv.builderValName
+                |> addBindDebugPoint spBind
+
+            // fun () -> bindExpr
+            let loopBody =
+                mkSynDelay mGuard bindExpr
+
+            // let rec __whileLoop = fun () -> bindExpr in __whileLoop ()
+            let loopBinding =
+                SynBinding(
+                    accessibility = None,
+                    kind = SynBindingKind.Normal,
+                    isInline = false,
+                    isMutable = false,
+                    attributes = [],
+                    xmlDoc = PreXmlDoc.Empty,
+                    valData = SynInfo.emptySynValData,
+                    headPat = mkSynPatVar None idLoop,
+                    returnInfo = None,
+                    expr = loopBody,
+                    range = mGuard,
+                    debugPoint = DebugPointAtBinding.NoneAtSticky,
+                    trivia = SynBindingTrivia.Zero
+                )
+
+            let whileExpr =
                 SynExpr.LetOrUse
                     {
-                        IsRecursive = false
-                        // isUse = false,
-                        IsFromSource = true // compiler generated during desugaring
-                        // isBang = true,
-                        Bindings = [ binding ]
-                        Body = body
-                        Range = mGuard
+                        IsRecursive = true
+                        IsFromSource = false
+                        Bindings = [ loopBinding ]
+                        Body = loopCall
+                        Range = mOrig
                         Trivia = SynLetOrUseTrivia.Zero
                     }
 
-            TryTranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace rewrittenWhileExpr translatedCtxt
+            Some(translatedCtxt whileExpr)
 
         | SynExpr.TryFinally(innerComp, unwindExpr, _mTryToLast, spTry, spFinally, trivia) ->
 
