@@ -2629,7 +2629,8 @@ and TranslateComputationExpressionBind
     // When the continuation is unit->unit (from do! producing `let! () = e in return ()`),
     // BindReturn would create BindReturn(e, fun () -> ()) which has type unit->unit.
     // If the builder's BindReturn expects a non-unit continuation (e.g. Expr -> Expr),
-    // this causes FS0001. Fall back to Bind + Return in this case.
+    // this causes FS0001. Fall back to Bind + Return in this case, which correctly
+    // selects the unit-continuation Bind overload (e.g. Bind(M, unit -> M)).
     let isUnitPatBinding =
         match consumePat with
         | SynPat.Const(SynConst.Unit, _) -> true
