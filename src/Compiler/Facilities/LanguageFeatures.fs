@@ -78,6 +78,8 @@ type LanguageFeature =
     | WarningWhenTailRecAttributeButNonTailRecUsage
     | UnmanagedConstraintCsharpInterop
     | WhileBang
+    | IfBang
+    | ForBang
     | ReuseSameFieldsInStructUnions
     | ExtendedFixedBindings
     | PreferStringGetPinnableReference
@@ -259,6 +261,8 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
                 LanguageFeature.FromEndSlicing, previewVersion // Unfinished features --- needs work
                 LanguageFeature.MethodOverloadsCache, previewVersion // Performance optimization for overload resolution
                 LanguageFeature.ImplicitDIMCoverage, languageVersion110
+                LanguageFeature.IfBang, previewVersion
+                LanguageFeature.ForBang, previewVersion
             ]
 
     static let defaultLanguageVersion = LanguageVersion("default")
@@ -418,6 +422,8 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
         | LanguageFeature.WarningWhenTailRecAttributeButNonTailRecUsage -> FSComp.SR.featureChkNotTailRecursive ()
         | LanguageFeature.UnmanagedConstraintCsharpInterop -> FSComp.SR.featureUnmanagedConstraintCsharpInterop ()
         | LanguageFeature.WhileBang -> FSComp.SR.featureWhileBang ()
+        | LanguageFeature.IfBang -> FSComp.SR.featureIfBang ()
+        | LanguageFeature.ForBang -> FSComp.SR.featureForBang ()
         | LanguageFeature.ReuseSameFieldsInStructUnions -> FSComp.SR.featureReuseSameFieldsInStructUnions ()
         | LanguageFeature.ExtendedFixedBindings -> FSComp.SR.featureExtendedFixedBindings ()
         | LanguageFeature.PreferStringGetPinnableReference -> FSComp.SR.featurePreferStringGetPinnableReference ()
