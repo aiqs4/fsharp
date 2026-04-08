@@ -432,9 +432,19 @@
         <target state="translated">срез с фиксированным индексом 3d/4d</target>
         <note />
       </trans-unit>
+      <trans-unit id="featureForBang">
+        <source>'for!' expression</source>
+        <target state="new">'for!' expression</target>
+        <note />
+      </trans-unit>
       <trans-unit id="featureFromEndSlicing">
         <source>from-end slicing</source>
         <target state="translated">срезы от конца</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="featureIfBang">
+        <source>'if!' expression</source>
+        <target state="new">'if!' expression</target>
         <note />
       </trans-unit>
       <trans-unit id="featureImplicitDIMCoverage">
@@ -8952,12 +8962,12 @@
         <target state="translated">Не удалось загрузить расширение диспетчера зависимостей {0}. Сообщение: {1}</target>
         <note />
       </trans-unit>
-        <trans-unit id="featureWarnWhenFunctionValueUsedAsInterpolatedStringArg" translate="yes" xml:space="preserve">
+      <trans-unit id="featureWarnWhenFunctionValueUsedAsInterpolatedStringArg" translate="yes" xml:space="preserve">
           <source>Warn when a function value is used as an interpolated string argument</source>
           <target state="new">Warn when a function value is used as an interpolated string argument</target>
           <note />
         </trans-unit>
-        <trans-unit id="tcFunctionValueUsedAsInterpolatedStringArg" translate="yes" xml:space="preserve">
+      <trans-unit id="tcFunctionValueUsedAsInterpolatedStringArg" translate="yes" xml:space="preserve">
           <source>This expression is a function value. When used in an interpolated string it will be formatted using its 'ToString' method, which is likely not the intended behavior. Consider applying the function to its arguments.</source>
           <target state="new">This expression is a function value. When used in an interpolated string it will be formatted using its 'ToString' method, which is likely not the intended behavior. Consider applying the function to its arguments.</target>
           <note />
