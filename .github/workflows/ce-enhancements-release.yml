@@ -1,0 +1,277 @@
+# ----------------------------------------------------------------------------
+# CI/CD Pipeline: features/ce-enhancements-desugaring
+#
+# Triggers:
+#   • Push to `features/ce-enhancements-desugaring`  → CI build + full tests
+#   • Version tag `ce/v*` pushed to that branch       → CI + NuGet publish +
+#                                                        GitHub release
+#
+# Required secrets (repository settings → Secrets and variables → Actions):
+#   NUGET_API_KEY  — NuGet.org API key with push access to the target package
+#
+# The workflow builds, packs, and tests in Release configuration, then:
+#   1. Publishes NuGet packages to NuGet.org (tag trigger only)
+#   2. Creates a GitHub release with the .nupkg files attached (tag trigger only)
+# ----------------------------------------------------------------------------
+
+name: CE Enhancements — CI / Release
+
+on:
+  push:
+    branches:
+      - features/ce-enhancements-desugaring
+    tags:
+      # Convention: ce/v1.2.3  (semver, prefixed with "ce/")
+      - 'ce/v[0-9]+.[0-9]+.[0-9]+*'
+  pull_request:
+    branches:
+      - features/ce-enhancements-desugaring
+
+# Limit concurrent runs: cancel in-flight CI when a newer push arrives on the
+# same branch, but NEVER cancel a release run.
+concurrency:
+  group: ce-enhancements-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+
+permissions:
+  contents: write   # needed to create GitHub releases and upload assets
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. BUILD + UNIT TESTS (runs on every push/PR)
+  # ──────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build & Unit Tests (Linux / net10.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history needed for versioning/ChangeLog
+
+      # Cache the .nuget package store across runs to speed up restore
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json', '**/Version.Details.xml') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Build (Release) + Pack NuGet packages
+        # build.sh --restore --build --pack --testcoreclr
+        # Equivalent to the upstream CI "testcoreclr" pipeline step.
+        run: ./build.sh -c Release --pack --testcoreclr
+        # --pack produces artifacts/packages/**/*.nupkg
+        # --testcoreclr runs FSharp.Compiler.ComponentTests + core unit tests
+
+      # Run the specific CE feature tests introduced in this branch
+      - name: Run CE Enhancements component tests
+        run: |
+          dotnet test \
+            --project tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj \
+            -c Release --no-build \
+            -- --filter-method "*CEEnhancementsTests*|*CEExprMethodTests*|*WhileBangTests*"
+
+      # Upload packages so the release job (and any human reviewer) can
+      # inspect them without re-running the build.
+      - name: Upload NuGet packages artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/packages/**/*.nupkg
+          if-no-files-found: error
+          retention-days: 30
+
+      # Upload the full test log so failures are diagnosable
+      - name: Upload build/test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            artifacts/log/**/*.log
+            artifacts/log/**/*.binlog
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. WINDOWS BUILD (smoke test — validates Windows-only code paths)
+  # ──────────────────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build & Smoke Test (Windows / net472 + net10.0)
+    runs-on: windows-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/packages.lock.json', '**/Version.Details.xml') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Build (Release) + Component tests (Windows)
+        run: .\build.cmd -c Release --testcoreclr
+        shell: cmd
+
+      - name: Upload Windows test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs-windows
+          path: |
+            artifacts/log/**/*.log
+            artifacts/log/**/*.binlog
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. NUGET PUBLISH + GITHUB RELEASE  (tag trigger only)
+  # ──────────────────────────────────────────────────────────────────────────
+  release:
+    name: NuGet Publish & GitHub Release
+    needs: [build, build-windows]
+    # Only run when a version tag is pushed; never on PRs.
+    if: startsWith(github.ref, 'refs/tags/ce/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: nuget-release   # optional: add a GitHub Environment with
+                                 # required reviewers for extra gate-keeping
+
+    steps:
+      - name: Checkout (for release notes / changelog)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Parse the version from the tag: "ce/v1.2.3" → "1.2.3"
+      - name: Parse version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/ce/v}"
+          echo "version=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "tag=ce/v${TAG}" >> "$GITHUB_OUTPUT"
+
+      # Download the packages built and validated in the build job
+      - name: Download NuGet packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: release-packages
+
+      - name: List packages to publish
+        run: ls -lR release-packages/
+
+      # Verify every package carries the expected version before publishing.
+      # This catches accidental pushes where the tag and built version disagree.
+      - name: Verify package versions match tag
+        run: |
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          MISMATCHED=()
+          while IFS= read -r -d '' pkg; do
+            filename=$(basename "$pkg")
+            # Extract version component from filename: Name.Version.nupkg
+            # NuGet file names follow: <id>.<version>.nupkg
+            pkg_version=$(echo "$filename" | grep -oP '(?<=[a-zA-Z.])\d+\.\d+\.\d+.*(?=\.nupkg)')
+            if [[ "$pkg_version" != "$TAG_VERSION"* ]]; then
+              MISMATCHED+=("$filename (found version: '$pkg_version', expected prefix: '$TAG_VERSION')")
+            fi
+          done < <(find release-packages -name '*.nupkg' -print0)
+
+          if [[ ${#MISMATCHED[@]} -gt 0 ]]; then
+            echo "::error::Package version mismatch detected:"
+            printf '  %s\n' "${MISMATCHED[@]}"
+            echo ""
+            echo "The tag ce/v${TAG_VERSION} was pushed, but the following packages have different versions."
+            echo "Ensure the tag matches the version in eng/Versions.props."
+            exit 1
+          fi
+          echo "All packages verified: version ${TAG_VERSION} ✓"
+
+      # Push to NuGet.org — skips packages that are already published so a
+      # re-run of a failed release won't error out.
+      - name: Publish packages to NuGet.org
+        run: |
+          find release-packages -name '*.nupkg' | while read pkg; do
+            echo "Pushing $(basename "$pkg") …"
+            dotnet nuget push "$pkg" \
+              --api-key "${{ secrets.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate \
+              --no-symbols
+          done
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+      # Build a changelog excerpt for the GitHub release body.
+      # Falls back gracefully if no release-notes entry is found for this tag.
+      - name: Extract release notes
+        id: changelog
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          NOTES_FILE="docs/release-notes/.FSharp.Compiler.Service/${VERSION}.md"
+          if [[ -f "$NOTES_FILE" ]]; then
+            BODY=$(cat "$NOTES_FILE")
+          else
+            BODY="## CE Enhancements v${VERSION}
+
+          Released from branch \`features/ce-enhancements-desugaring\`.
+
+          ### Changes in this release
+
+          - \`WhileExpr\` builder method — unconstrained \`while\` guard in computation expressions
+          - \`ForExpr\` builder method — unconstrained \`for\` collection in computation expressions
+          - \`IfExpr\` builder method — unconstrained \`if\` guard in computation expressions
+          - \`while!\` via \`WhileBang\` builder method
+          - \`if!\` desugaring to \`match!\`
+          - \`for!\` skipping \`Source()\`
+          - \`BindReturn\` poisoning fix for \`do!\`
+
+          > Full changelog: see \`docs/release-notes/\` in the repository."
+          fi
+          # Use multiline output trick
+          {
+            echo 'body<<RELEASE_BODY_EOF'
+            echo "$BODY"
+            echo 'RELEASE_BODY_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      # Create a GitHub release with the .nupkg files attached.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "CE Enhancements v${{ steps.version.outputs.version }}"
+          body: ${{ steps.changelog.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          files: release-packages/**/*.nupkg
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summarize release
+        run: |
+          echo "## 🎉 Release complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Version:** \`${{ steps.version.outputs.version }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**NuGet packages published:**" >> "$GITHUB_STEP_SUMMARY"
+          find release-packages -name '*.nupkg' -exec basename {} \; | while read f; do
+            echo "- \`$f\`" >> "$GITHUB_STEP_SUMMARY"
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**GitHub Release:** https://github.com/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}" >> "$GITHUB_STEP_SUMMARY"
