@@ -177,6 +177,7 @@ let result = b {
             """
 module Test
 
+[<NoEquality; NoComparison>]
 type Expr = Items of string | Body of string | ForLoop of Expr * (Expr -> Expr) | Nop | Seq of Expr list
 
 type Builder() =
@@ -212,6 +213,7 @@ match result with
             """
 module Test
 
+[<NoEquality; NoComparison>]
 type Expr = Items of string | Body of string | ForLoop of Expr * (Expr -> Expr) | Nop
 
 type Builder() =
@@ -531,6 +533,7 @@ test () |> Async.RunSynchronously |> printfn "%d"
             """
 module Test
 
+[<NoEquality; NoComparison>]
 type Expr =
     | C of int | LG of string | Assign of string * Expr
     | WhileLoop of Expr * Expr | ForLoop of Expr * (Expr -> Expr) | IfNode of Expr * Expr * Expr
@@ -563,8 +566,18 @@ let result = b {
 
 let mutable pass = true
 
-match result with
-| Seq parts when parts.Length >= 3 ->
+// Combine produces right-nested binary Seq: Seq [a; Seq [b; c]]
+let rec collectParts expr =
+    match expr with
+    | Seq [a; b] -> a :: collectParts b
+    | other -> [other]
+
+let parts = collectParts result
+
+if parts.Length < 3 then
+    printfn "FAIL: expected 3 parts, got %d: %A" parts.Length result
+    pass <- false
+else
     match parts.[0] with
     | WhileLoop(LG "cond", _) -> ()
     | x -> printfn "FAIL while: %A" x; pass <- false
@@ -576,7 +589,6 @@ match result with
     match parts.[2] with
     | IfNode(LG "flag", _, _) -> ()
     | x -> printfn "FAIL if: %A" x; pass <- false
-| x -> printfn "FAIL overall: %A" x; pass <- false
 
 if pass then printfn "PASS"
         """
