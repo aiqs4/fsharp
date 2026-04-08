@@ -86,10 +86,11 @@ to tunnel the guard through the bool bottleneck.
 **Fix:** If the builder defines a `WhileBang` method, `while!` desugars to:
 ```
 while! guard do body
-  → builder.WhileBang(guard, builder.Delay(fun () -> body))
+  → builder.WhileBang(builder.Source(guard), builder.Delay(fun () -> body))
 ```
-The builder receives the guard directly — no `Bind`, no bool coercion. The `WhileBang`
-method's signature determines the guard type entirely.
+The guard is Source-wrapped (consistent with `let!`/`match!`), then passed directly to
+the builder — no `Bind`, no bool coercion. The `WhileBang` method's signature determines
+the guard type entirely.
 
 If the builder has no `WhileBang` method, the compiler falls back to the existing
 Bind/if/Combine/Zero pattern (fully backward compatible).

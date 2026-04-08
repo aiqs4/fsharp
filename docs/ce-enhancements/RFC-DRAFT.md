@@ -21,6 +21,20 @@ F# CEs are a powerful metaprogramming facility, but several limitations prevent 
 
 4. **`for` inside CEs forces `IEnumerable` via `Source()`** — When a builder defines `Source()`, regular `for` wraps the collection through it, requiring `IEnumerable`. Builders working with custom collection types can't use `for` without also defining `Source`.
 
+## Design Principles
+
+Each enhancement follows the principle of **minimal extension**: reuse existing infrastructure where possible, add new builder methods only when the existing desugaring imposes an unavoidable type constraint.
+
+| Construct | Approach | Rationale |
+|-----------|----------|-----------|
+| `if!` | Parser rewrite → `match!` | `match!` already handles `Bind` + pattern matching. `if! g then a else b` is exactly `match! g with true → a \| false → b`. No new builder method needed. |
+| `for!` | Parser rewrite → `for` without `Source` | `For` already handles iteration. The `!` just skips `Source()` wrapping, removing the `IEnumerable` constraint. No new builder method needed. |
+| `while!` | New `WhileBang` builder method (optional) | The existing desugaring necessarily constrains the guard to `bool` (via `if __res then`). This is the **only** construct where the standard desugaring imposes a type constraint the builder cannot control. `WhileBang` is the escape hatch. |
+| `do!`/`BindReturn` | Skip optimization for unit pattern | `BindReturn(e, fun () → ())` has `unit → unit` continuation that fails `BindReturn(M, M → M)` matching. Falling back to `Bind + Return` correctly selects the unit overload. |
+| `do!`/FS0041 | Type-annotate continuation | `(unit → _)` annotation gives the constraint solver enough information to disambiguate `Bind(M, unit → M)` vs `Bind(M, Expr → M)` without over-constraining. |
+
+The key insight is that `yield!`, `return!`, `use!`, and `match!` already have clean builder method dispatch (`YieldFrom`, `ReturnFrom`, `Bind`, etc.) and require no changes. Only `while!` genuinely needs a new builder method because its fallback hardcodes `bool`.
+
 ## Detailed Design
 
 ### 1. `if!` — Conditional Bind
@@ -97,10 +111,10 @@ Only requires `Bind`, `Combine`, `Zero`. Works for async/task CEs where guard is
 **Solution:** If the builder defines a `WhileBang` method, the compiler uses it directly:
 ```fsharp
 while! guard do body
-  → builder.WhileBang(guard, builder.Delay(fun () -> body))
+  → builder.WhileBang(builder.Source(guard), builder.Delay(fun () -> body))
 ```
 
-The guard passes directly to the builder — no `Bind`, no bool coercion. The builder's `WhileBang` signature determines the guard type.
+The guard is Source-wrapped (consistent with `let!`/`match!`), then passed directly to the builder — no `Bind`, no bool coercion. The builder's `WhileBang` signature determines the guard type.
 
 **Fallback:** If no `WhileBang` method exists, the compiler uses the Bind/if pattern from 3a. Fully backward compatible.
 
