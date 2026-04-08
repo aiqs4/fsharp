@@ -1471,23 +1471,17 @@ let rec TryTranslateComputationExpression
                 requireBuilderMethod "Delay" ceenv mWhile mWhile
 
                 Some(
-                    TranslateComputationExpression
-                        (noTailCall ceenv)
-                        CompExprTranslationPass.Initial
-                        q
-                        varSpace
-                        innerComp
-                        (fun holeFill ->
-                            translatedCtxt (
-                                mkSynCall
-                                    "WhileExpr"
-                                    mWhile
-                                    [
-                                        guardExpr
-                                        mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
-                                    ]
-                                    ceenv.builderValName
-                            ))
+                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+                        translatedCtxt (
+                            mkSynCall
+                                "WhileExpr"
+                                mWhile
+                                [
+                                    guardExpr
+                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
+                                ]
+                                ceenv.builderValName
+                        ))
                 )
             else
                 // Existing path: builder.While(fun () -> guard, builder.Delay(fun () -> body))
@@ -1495,23 +1489,17 @@ let rec TryTranslateComputationExpression
                 requireBuilderMethod "Delay" ceenv mWhile mWhile
 
                 Some(
-                    TranslateComputationExpression
-                        (noTailCall ceenv)
-                        CompExprTranslationPass.Initial
-                        q
-                        varSpace
-                        innerComp
-                        (fun holeFill ->
-                            translatedCtxt (
-                                mkSynCall
-                                    "While"
-                                    mWhile
-                                    [
-                                        mkSynDelay2 guardExpr
-                                        mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
-                                    ]
-                                    ceenv.builderValName
-                            ))
+                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+                        translatedCtxt (
+                            mkSynCall
+                                "While"
+                                mWhile
+                                [
+                                    mkSynDelay2 guardExpr
+                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
+                                ]
+                                ceenv.builderValName
+                        ))
                 )
 
         | SynExpr.WhileBang(spWhile, guardExpr, innerComp, mOrig) ->
@@ -1935,32 +1923,18 @@ let rec TryTranslateComputationExpression
                         error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
 
                     Some(
-                        TranslateComputationExpression
-                            ceenv
-                            CompExprTranslationPass.Initial
-                            q
-                            varSpace
-                            thenComp
-                            (fun thenFill ->
-                                let thenDelayed =
-                                    mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
+                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun thenFill ->
+                            let thenDelayed =
+                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
 
-                                let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
+                            let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
 
-                                let elseDelayed =
-                                    mkSynCall
-                                        "Delay"
-                                        trivia.IfToThenRange
-                                        [ mkSynDelay elseComp.Range elseTranslated ]
-                                        ceenv.builderValName
+                            let elseDelayed =
+                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay elseComp.Range elseTranslated ] ceenv.builderValName
 
-                                translatedCtxt (
-                                    mkSynCall
-                                        "IfExpr"
-                                        trivia.IfToThenRange
-                                        [ guardExpr; thenDelayed; elseDelayed ]
-                                        ceenv.builderValName
-                                ))
+                            translatedCtxt (
+                                mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; elseDelayed ] ceenv.builderValName
+                            ))
                     )
                 | None ->
                     requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
@@ -1968,23 +1942,13 @@ let rec TryTranslateComputationExpression
                     let zeroExpr = mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
 
                     Some(
-                        TranslateComputationExpression
-                            ceenv
-                            CompExprTranslationPass.Initial
-                            q
-                            varSpace
-                            thenComp
-                            (fun thenFill ->
-                                let thenDelayed =
-                                    mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
+                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun thenFill ->
+                            let thenDelayed =
+                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
 
-                                translatedCtxt (
-                                    mkSynCall
-                                        "IfExpr"
-                                        trivia.IfToThenRange
-                                        [ guardExpr; thenDelayed; zeroExpr ]
-                                        ceenv.builderValName
-                                ))
+                            translatedCtxt (
+                                mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; zeroExpr ] ceenv.builderValName
+                            ))
                     )
             else
                 // Existing path: standard if/then/else desugaring
