@@ -69,3 +69,46 @@ __whileLoop()
 ```
 Only requires `Bind`, `Combine`, and `Zero`. `While` is no longer required for `while!`.
 Regular `while` (non-bang) is unchanged.
+
+---
+
+## `WhileBang` Optional Builder Method
+
+**File:** `src/Compiler/Checking/Expressions/CheckComputationExpressions.fs`
+**Function:** `TryTranslateComputationExpression`, `SynExpr.WhileBang` case
+
+**Problem:** The Bind/if/Combine/Zero desugaring above hardcodes `if __res then ... else ...`,
+forcing the `Bind` continuation parameter to be `bool`. This prevents DSL-style builders
+(e.g., WASM code generators) from using `while!` with non-bool guard types. Builders had
+to resort to hacks like `Bind(g: Expr, k: bool -> Expr)` with a side-effecting `Stack<Expr>`
+to tunnel the guard through the bool bottleneck.
+
+**Fix:** If the builder defines a `WhileBang` method, `while!` desugars to:
+```
+while! guard do body
+  → builder.WhileBang(guard, builder.Delay(fun () -> body))
+```
+The builder receives the guard directly — no `Bind`, no bool coercion. The `WhileBang`
+method's signature determines the guard type entirely.
+
+If the builder has no `WhileBang` method, the compiler falls back to the existing
+Bind/if/Combine/Zero pattern (fully backward compatible).
+
+**Example — WASM builder (before):**
+```fsharp
+// HACK: stack to tunnel guard through bool bottleneck
+let _guards = Stack<Expr>()
+member _.Bind(g: Expr, k: bool -> Expr) = _guards.Push(g); k true
+member _.While(_: unit -> bool, body) =
+    if _guards.Count > 0 then
+        let g = _guards.Pop()
+        Block(exit, Loop(lbl, If(g, Seq [body; Continue lbl], Break exit)))
+    else body
+```
+
+**Example — WASM builder (after):**
+```fsharp
+// Clean: compiler calls WhileBang directly, no stack hack needed
+member _.WhileBang(guard: Expr, body: Expr) =
+    Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
+```

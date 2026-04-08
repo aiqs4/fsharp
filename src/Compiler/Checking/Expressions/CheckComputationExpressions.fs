@@ -1418,15 +1418,37 @@ let rec TryTranslateComputationExpression
             if ceenv.isQuery then
                 error (Error(FSComp.SR.tcNoWhileInQuery (), mWhile))
 
-            requireBuilderMethod "Bind" ceenv mWhile mWhile
-            requireBuilderMethod "Combine" ceenv mWhile mWhile
-            requireBuilderMethod "Zero" ceenv mWhile mWhile
-
             // 'while!' is hit just before each time the guard is called
             let guardExpr =
                 match spWhile with
                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mWhile, false, guardExpr)
                 | DebugPointAtWhile.No -> guardExpr
+
+            // Check if the builder has a WhileBang method.
+            // If yes, desugar to: builder.WhileBang(guard, builder.Delay(fun () -> body))
+            // This avoids the bool constraint — the builder controls the guard type entirely.
+            // If no, fall back to the Bind/if/Combine/Zero pattern (backward compatible).
+            if hasBuilderMethod ceenv mWhile "WhileBang" then
+                requireBuilderMethod "Delay" ceenv mWhile mWhile
+
+                Some(
+                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+                        translatedCtxt (
+                            mkSynCall
+                                "WhileBang"
+                                mWhile
+                                [
+                                    guardExpr
+                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
+                                ]
+                                ceenv.builderValName
+                        ))
+                )
+            else
+
+            requireBuilderMethod "Bind" ceenv mWhile mWhile
+            requireBuilderMethod "Combine" ceenv mWhile mWhile
+            requireBuilderMethod "Zero" ceenv mWhile mWhile
 
             // Desugar while! guard do body to:
             //   let rec __whileLoop () =
