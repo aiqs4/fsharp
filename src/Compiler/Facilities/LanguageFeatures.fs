@@ -80,6 +80,9 @@ type LanguageFeature =
     | WhileBang
     | IfBang
     | ForBang
+    | WhileExpr
+    | ForExpr
+    | IfExpr
     | ReuseSameFieldsInStructUnions
     | ExtendedFixedBindings
     | PreferStringGetPinnableReference
@@ -263,6 +266,9 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
                 LanguageFeature.ImplicitDIMCoverage, languageVersion110
                 LanguageFeature.IfBang, previewVersion
                 LanguageFeature.ForBang, previewVersion
+                LanguageFeature.WhileExpr, previewVersion
+                LanguageFeature.ForExpr, previewVersion
+                LanguageFeature.IfExpr, previewVersion
             ]
 
     static let defaultLanguageVersion = LanguageVersion("default")
@@ -424,6 +430,9 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
         | LanguageFeature.WhileBang -> FSComp.SR.featureWhileBang ()
         | LanguageFeature.IfBang -> FSComp.SR.featureIfBang ()
         | LanguageFeature.ForBang -> FSComp.SR.featureForBang ()
+        | LanguageFeature.WhileExpr -> FSComp.SR.featureWhileExpr ()
+        | LanguageFeature.ForExpr -> FSComp.SR.featureForExpr ()
+        | LanguageFeature.IfExpr -> FSComp.SR.featureIfExpr ()
         | LanguageFeature.ReuseSameFieldsInStructUnions -> FSComp.SR.featureReuseSameFieldsInStructUnions ()
         | LanguageFeature.ExtendedFixedBindings -> FSComp.SR.featureExtendedFixedBindings ()
         | LanguageFeature.PreferStringGetPinnableReference -> FSComp.SR.featurePreferStringGetPinnableReference ()

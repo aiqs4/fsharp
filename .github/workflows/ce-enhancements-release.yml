@@ -1,0 +1,356 @@
+# ----------------------------------------------------------------------------
+# CI/CD Pipeline: features/ce-enhancements-desugaring
+#
+# This is the ONLY workflow that runs for the ce-enhancements branch.
+# All other repository workflows target `main` / `release/*` only.
+#
+# Triggers:
+#   • Push to `features/ce-enhancements-desugaring`  → build compiler + fsi,
+#                                                        pack NuGet packages,
+#                                                        run CE tests
+#   • PR targeting `features/ce-enhancements-desugaring` → same as above
+#   • Tag `ce/v*` pushed (any branch)                → above + NuGet publish
+#                                                        + GitHub release
+#
+# Package version format:
+#   {FCS-base}.{FSBuild}-ce-enhancements.{short-sha}
+#   e.g.  43.12.100-ce-enhancements.a1b2c3d
+#   The base version (43.12.100) is read from eng/Versions.props and ties
+#   this build back to the upstream compiler release it was branched from.
+#   The compiler banner also shows: "[CE-Enhancements v1]" (see CompilerLocation.fs).
+#
+# Required secrets (Settings → Secrets and variables → Actions):
+#   NUGET_API_KEY  — NuGet.org API key with push access to the target package
+# ----------------------------------------------------------------------------
+
+name: CE Enhancements — Build / Release
+
+on:
+  push:
+    branches:
+      - features/ce-enhancements-desugaring
+    tags:
+      # Convention: ce/v43.12.100  or  ce/v43.12.100-ce-enhancements
+      - 'ce/v[0-9]+.[0-9]+.[0-9]+*'
+  pull_request:
+    branches:
+      - features/ce-enhancements-desugaring
+
+# Cancel in-flight CI on new pushes to the same branch.
+# Never cancel a release run (tag trigger).
+concurrency:
+  group: ce-enhancements-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+
+permissions:
+  contents: write   # create GitHub releases + upload release assets
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # 1. BUILD COMPILER + INTERACTIVE  (runs on every push / PR)
+  #
+  # Builds FSharp.Compiler.Service and fsi (F# Interactive) in Release mode
+  # and packs NuGet packages.
+  # ──────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build compiler + fsi / pack NuGet
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    outputs:
+      ce_version: ${{ steps.version.outputs.ce_version }}
+      base_version: ${{ steps.version.outputs.base_version }}
+      short_sha: ${{ steps.version.outputs.short_sha }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0    # full history needed for version computation
+
+      # ── Version computation ────────────────────────────────────────────────
+      # Produces a version that embeds the upstream base AND a CE identifier:
+      #   43.12.100-ce-enhancements.a1b2c3d
+      # The compiler itself also embeds "[CE-Enhancements v1]" in its banner
+      # (see src/Compiler/Facilities/CompilerLocation.fs: CEEnhancementsSuffix).
+      - name: Compute CE version
+        id: version
+        run: |
+          FCS_MAJOR=$(grep -oPm1 '(?<=<FCSMajorVersion>)[^<]+' eng/Versions.props)
+          FCS_MINOR=$(grep -oPm1 '(?<=<FCSMinorVersion>)[^<]+' eng/Versions.props)
+          FS_BUILD=$(grep -oPm1  '(?<=<FSBuildVersion>)[^<]+'  eng/Versions.props)
+          BASE_VERSION="${FCS_MAJOR}.${FCS_MINOR}.${FS_BUILD}"
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          CE_VERSION="${BASE_VERSION}-ce-enhancements.${SHORT_SHA}"
+          echo "base_version=${BASE_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "ce_version=${CE_VERSION}"     >> "$GITHUB_OUTPUT"
+          echo "short_sha=${SHORT_SHA}"       >> "$GITHUB_OUTPUT"
+          echo "Base version : ${BASE_VERSION}"
+          echo "CE version   : ${CE_VERSION}"
+
+      # ── NuGet cache ───────────────────────────────────────────────────────
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/Version.Details.xml') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      # ── Build & pack ───────────────────────────────────────────────────────
+      # --restore  restores all NuGet dependencies
+      # --build    compiles (including bootstrap compiler step)
+      # --pack     produces .nupkg files under artifacts/packages/
+      #
+      # /p:VersionSuffix injects the CE version suffix so every package is
+      # stamped: 43.12.100-ce-enhancements.{sha}
+      - name: Build compiler + fsi and pack
+        run: |
+          ./build.sh -c Release --restore --build --pack \
+            /p:VersionSuffix="ce-enhancements.${{ steps.version.outputs.short_sha }}"
+
+      # ── Verify CE version is embedded in the compiler ─────────────────────
+      # Ensures the [CE-Enhancements v1] tag is visible in fsc --version output.
+      - name: Verify CE version in fsc --version
+        run: |
+          FSC=$(find artifacts/bin -name 'fsc' -o -name 'fsc.dll' 2>/dev/null | head -1)
+          if [[ -z "$FSC" ]]; then
+            echo "::warning::fsc binary not found — skipping version check"
+          else
+            VERSION_OUTPUT=$(dotnet "$FSC" --version 2>/dev/null || true)
+            echo "fsc --version: ${VERSION_OUTPUT}"
+            if echo "$VERSION_OUTPUT" | grep -q "CE-Enhancements"; then
+              echo "✓ CE-Enhancements tag confirmed in fsc --version"
+            else
+              echo "::warning::CE-Enhancements tag not found in fsc --version output"
+            fi
+          fi
+
+      # ── Artifact upload ───────────────────────────────────────────────────
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: artifacts/packages/**/*.nupkg
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build artifacts (for test job)
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            artifacts/bin/**
+          retention-days: 1
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: |
+            artifacts/log/**/*.log
+            artifacts/log/**/*.binlog
+          retention-days: 14
+
+      # ── Build summary ─────────────────────────────────────────────────────
+      - name: Write build summary
+        if: always()
+        run: |
+          echo "## Build summary" >> "$GITHUB_STEP_SUMMARY"
+          echo ""                 >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| -------- | ----- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Base version (upstream) | \`${{ steps.version.outputs.base_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CE package version      | \`${{ steps.version.outputs.ce_version }}\` |"  >> "$GITHUB_STEP_SUMMARY"
+          echo "| Compiler banner suffix  | \`[CE-Enhancements v1]\` |"                      >> "$GITHUB_STEP_SUMMARY"
+          echo "| Commit                  | \`${{ github.sha }}\` |"                         >> "$GITHUB_STEP_SUMMARY"
+          echo ""                 >> "$GITHUB_STEP_SUMMARY"
+          echo "### Packages" >> "$GITHUB_STEP_SUMMARY"
+          find artifacts/packages -name '*.nupkg' -exec basename {} \; 2>/dev/null | \
+            while read f; do echo "- \`$f\`" >> "$GITHUB_STEP_SUMMARY"; done || true
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 2. CE FEATURE TESTS  (runs after build, on every push / PR)
+  #
+  # Runs the CE-specific component tests introduced in this branch to verify
+  # that WhileExpr, ForExpr, IfExpr, while!, if!, for!, and BindReturn changes
+  # are correct. Fails fast if the compiler is broken.
+  # ──────────────────────────────────────────────────────────────────────────
+  test-ce:
+    name: CE feature tests
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/Version.Details.xml') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: artifacts/bin
+
+      # Run the CE feature tests in Release configuration against the patched
+      # compiler. --no-build uses the artifacts downloaded above.
+      - name: Run CE component tests
+        run: |
+          dotnet test \
+            tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj \
+            -c Release --no-build \
+            -- --filter-method "*CEEnhancementsTests*|*CEExprMethodTests*|*WhileBangTests*"
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-ce
+          path: |
+            tests/**/TestResults/**/*.xml
+            tests/**/TestResults/**/*.trx
+          retention-days: 7
+
+      - name: Write test summary
+        if: always()
+        run: |
+          echo "## CE Tests" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Suite | Filter |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| ----- | ------ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| CEEnhancementsTests  | \`*CEEnhancementsTests*\` |"  >> "$GITHUB_STEP_SUMMARY"
+          echo "| CEExprMethodTests    | \`*CEExprMethodTests*\` |"    >> "$GITHUB_STEP_SUMMARY"
+          echo "| WhileBangTests       | \`*WhileBangTests*\` |"       >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "CE version: \`${{ needs.build.outputs.ce_version }}\`" >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # 3. NUGET PUBLISH + GITHUB RELEASE  (tag trigger only)
+  #
+  # Requires both build AND tests to pass. Downloads the packages produced by
+  # the build job, pushes them to NuGet.org, and creates a GitHub release.
+  # ──────────────────────────────────────────────────────────────────────────
+  release:
+    name: NuGet publish + GitHub release
+    needs: [build, test-ce]
+    if: startsWith(github.ref, 'refs/tags/ce/v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: nuget-release   # configure required reviewers here if desired
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Strip the "ce/v" prefix to get the bare version string
+      - name: Parse tag version
+        id: tag
+        run: |
+          TAG_VERSION="${GITHUB_REF#refs/tags/ce/v}"
+          echo "version=${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "full_tag=ce/v${TAG_VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download NuGet packages
+        uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: release-packages
+
+      - name: List packages
+        run: find release-packages -name '*.nupkg' | sort
+
+      # Publish to NuGet.org — --skip-duplicate makes re-runs safe.
+      - name: Publish to NuGet.org
+        run: |
+          find release-packages -name '*.nupkg' | while read pkg; do
+            echo "→ Pushing $(basename "$pkg") …"
+            dotnet nuget push "$pkg" \
+              --api-key "${{ secrets.NUGET_API_KEY }}" \
+              --source https://api.nuget.org/v3/index.json \
+              --skip-duplicate \
+              --no-symbols
+          done
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+
+      # Build the release body from the release-notes file if present,
+      # otherwise fall back to a descriptive default.
+      - name: Prepare release notes
+        id: notes
+        run: |
+          TAG_VERSION="${{ steps.tag.outputs.version }}"
+          NOTES_FILE="docs/release-notes/.FSharp.Compiler.Service/${TAG_VERSION}.md"
+          if [[ -f "$NOTES_FILE" ]]; then
+            BODY=$(cat "$NOTES_FILE")
+          else
+            BASE="${{ needs.build.outputs.base_version }}"
+            CE="${{ needs.build.outputs.ce_version }}"
+            BODY="## CE Enhancements ${TAG_VERSION}
+
+          > Based on FSharp.Compiler.Service **${BASE}** (upstream base version)
+          > Package version: \`${CE}\`
+          > Compiler banner: \`[CE-Enhancements v1]\`
+
+          Released from branch \`features/ce-enhancements-desugaring\`.
+
+          ### Highlights
+
+          - \`WhileExpr\` builder method — unconstrained \`while\` guard in computation expressions
+          - \`ForExpr\` builder method — unconstrained \`for\` iteration in computation expressions
+          - \`IfExpr\` builder method — unconstrained \`if\` guard in computation expressions
+          - \`while!\` / \`if!\` / \`for!\` bang-keyword support
+          - \`BindReturn\` poisoning fix for trailing \`do!\`
+
+          See \`docs/release-notes/\` for the full changelog."
+          fi
+          {
+            echo 'body<<RELEASE_EOF'
+            echo "$BODY"
+            echo 'RELEASE_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.full_tag }}
+          name: "CE Enhancements ${{ steps.tag.outputs.version }}"
+          body: ${{ steps.notes.outputs.body }}
+          draft: false
+          prerelease: ${{ contains(steps.tag.outputs.version, '-') }}
+          files: release-packages/**/*.nupkg
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Write release summary
+        run: |
+          echo "## 🎉 Release complete" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| -------- | ----- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Tag             | \`${{ steps.tag.outputs.full_tag }}\` |"       >> "$GITHUB_STEP_SUMMARY"
+          echo "| Package version | \`${{ needs.build.outputs.ce_version }}\` |"  >> "$GITHUB_STEP_SUMMARY"
+          echo "| Base version    | \`${{ needs.build.outputs.base_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Compiler banner | \`[CE-Enhancements v1]\` |"                   >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Packages:**" >> "$GITHUB_STEP_SUMMARY"
+          find release-packages -name '*.nupkg' -exec basename {} \; | \
+            while read f; do echo "- \`$f\`" >> "$GITHUB_STEP_SUMMARY"; done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[View on GitHub](https://github.com/${{ github.repository }}/releases/tag/${{ steps.tag.outputs.full_tag }})" >> "$GITHUB_STEP_SUMMARY"

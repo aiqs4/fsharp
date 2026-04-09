@@ -1,0 +1,512 @@
+# ----------------------------------------------------------------------------
+# CE-Enhancements Compatibility Test Suite
+#
+# Validates that the CE-Enhancements compiler patch does not break existing
+# real-world F# libraries. Each job checks out a library's source code and
+# runs its own test suite against the PATCHED compiler.
+#
+# Triggered by:
+#   • Push / PR to `features/ce-enhancements-desugaring`
+#   • Manual dispatch (workflow_dispatch) for ad-hoc runs
+#
+# Libraries under test:
+#   ┌─────────────────────────┬────────────────────────────────────────────┐
+#   │ Library                 │ CE features stressed                       │
+#   ├─────────────────────────┼────────────────────────────────────────────┤
+#   │ FSharpPlus              │ Generic CEs, overloaded Bind/Return        │
+#   │ FsToolkit.ErrorHandling │ result{}/asyncResult{}/validation{}        │
+#   │ Ply                     │ Resumable code / task{} state machines     │
+#   │ IcedTasks               │ ValueTask / cancellableTask state machines │
+#   │ Giraffe                 │ Web DSL pipeline CE, HttpHandler            │
+#   │ Unquote                 │ Quotation trees, CE metaprogramming        │
+#   └─────────────────────────┴────────────────────────────────────────────┘
+#
+# warnaserror is enabled via fsharp-mod-tests/Directory.Build.props so any
+# new CE-related ambiguity introduced by the patch is caught immediately.
+#
+# The CE version is embedded in fsc --version output:
+#   "Microsoft (R) F# Compiler version X.Y.Z for F# A.B [CE-Enhancements v1]"
+# ----------------------------------------------------------------------------
+
+name: CE Enhancements — Compatibility Tests
+
+on:
+  push:
+    branches:
+      - features/ce-enhancements-desugaring
+  pull_request:
+    branches:
+      - features/ce-enhancements-desugaring
+  workflow_dispatch:
+    inputs:
+      treat_warnings_as_errors:
+        description: "Treat all warnings as errors (warnaserror)"
+        required: false
+        default: "true"
+        type: choice
+        options: ["true", "false"]
+
+concurrency:
+  group: ce-compat-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/packages
+  # warnaserror default (can be overridden per library job below)
+  CE_WARNISERROR: ${{ github.event.inputs.treat_warnings_as_errors || 'true' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────────────
+  # BUILD the patched compiler.  All test jobs depend on this.
+  # The fsc.dll path is exposed as a job output and passed to test jobs
+  # via the CE_FSC_DLL env-var that Directory.Build.props reads.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-compiler:
+    name: Build patched compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    outputs:
+      fsc_dll_path: ${{ steps.locate.outputs.fsc_dll_path }}
+      ce_version: ${{ steps.ver.outputs.ce_version }}
+
+    steps:
+      - name: Checkout fsharp repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.NUGET_PACKAGES }}
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/Version.Details.xml') }}
+          restore-keys: nuget-${{ runner.os }}-
+
+      - name: Build patched fsc + fsi
+        run: ./build.sh -c Release --restore --build
+
+      - name: Verify CE-Enhancements tag in fsc --version
+        id: ver
+        run: |
+          FSC_DLL=$(find artifacts/bin/fsc/Release -name 'fsc.dll' | head -1)
+          VERSION=$(dotnet "$FSC_DLL" --version 2>/dev/null || true)
+          echo "fsc --version: $VERSION"
+          if echo "$VERSION" | grep -q "CE-Enhancements"; then
+            echo "✓ [CE-Enhancements v1] confirmed"
+          else
+            echo "::warning::CE-Enhancements tag not found in fsc --version — check CompilerLocation.fs"
+          fi
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "ce_version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Locate fsc.dll
+        id: locate
+        run: |
+          FSC_DLL=$(realpath $(find artifacts/bin/fsc/Release -name 'fsc.dll' | head -1))
+          echo "fsc_dll_path=$FSC_DLL" >> "$GITHUB_OUTPUT"
+          echo "Patched fsc.dll: $FSC_DLL"
+
+      - name: Upload patched compiler artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: patched-compiler
+          # Upload the entire Release/net10.0 directory so the test jobs have
+          # the compiler dll, FSharp.Build.dll and the .targets/.props files.
+          path: artifacts/bin/fsc/Release/net10.0/
+          retention-days: 1
+
+      - name: Write build summary
+        run: |
+          echo "## Patched compiler" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Property | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| -------- | ----- |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| fsc --version | \`${{ steps.ver.outputs.ce_version }}\` |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| fsc.dll | \`${{ steps.locate.outputs.fsc_dll_path }}\` |" >> "$GITHUB_STEP_SUMMARY"
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # REUSABLE test step definition (via a local composite action pattern).
+  # Each library job follows the same structure:
+  #   1. checkout library source
+  #   2. download patched compiler artifact
+  #   3. dotnet test with CE_FSC_DLL → patched fsc
+  # ──────────────────────────────────────────────────────────────────────────
+
+  # ── FSharpPlus ─────────────────────────────────────────────────────────────
+  # Generic CEs with overloaded Bind/Return — stress test for type checker.
+  test-fsharplus:
+    name: "Compat: FSharpPlus"
+    needs: build-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout FSharpPlus
+        uses: actions/checkout@v4
+        with:
+          repository: fsprojects/FSharpPlus
+          ref: master
+          path: fsharp-mod-tests/FSharpPlus
+
+      - name: Download patched compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-compiler
+          path: patched-fsc
+
+      - name: Run FSharpPlus tests
+        working-directory: fsharp-mod-tests/FSharpPlus
+        env:
+          CE_FSC_DLL: ${{ github.workspace }}/patched-fsc/fsc.dll
+          CECompatTreatWarningsAsErrors: ${{ env.CE_WARNISERROR }}
+        run: |
+          echo "Using compiler: $CE_FSC_DLL"
+          dotnet --version
+          dotnet $CE_FSC_DLL --version
+          dotnet test --configuration Release 2>&1 | tee ../FSharpPlus-results.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results-fsharplus
+          path: fsharp-mod-tests/FSharpPlus-results.txt
+          retention-days: 7
+
+  # ── FsToolkit.ErrorHandling ────────────────────────────────────────────────
+  # result{} / asyncResult{} / validation{} — nested CE combinations.
+  test-fstoolkit:
+    name: "Compat: FsToolkit.ErrorHandling"
+    needs: build-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout FsToolkit.ErrorHandling
+        uses: actions/checkout@v4
+        with:
+          repository: demystifyfp/FsToolkit.ErrorHandling
+          ref: master
+          path: fsharp-mod-tests/FsToolkit.ErrorHandling
+
+      - name: Download patched compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-compiler
+          path: patched-fsc
+
+      - name: Run FsToolkit.ErrorHandling tests
+        working-directory: fsharp-mod-tests/FsToolkit.ErrorHandling
+        env:
+          CE_FSC_DLL: ${{ github.workspace }}/patched-fsc/fsc.dll
+          CECompatTreatWarningsAsErrors: ${{ env.CE_WARNISERROR }}
+        run: |
+          echo "Using compiler: $CE_FSC_DLL"
+          dotnet $CE_FSC_DLL --version
+          dotnet test --configuration Release 2>&1 | tee ../FsToolkit-results.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results-fstoolkit
+          path: fsharp-mod-tests/FsToolkit-results.txt
+          retention-days: 7
+
+  # ── Ply ────────────────────────────────────────────────────────────────────
+  # High-performance task{} via resumable code / state machine generation.
+  test-ply:
+    name: "Compat: Ply"
+    needs: build-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Ply
+        uses: actions/checkout@v4
+        with:
+          repository: crowded/ply
+          ref: master
+          path: fsharp-mod-tests/Ply
+
+      - name: Download patched compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-compiler
+          path: patched-fsc
+
+      - name: Run Ply tests
+        working-directory: fsharp-mod-tests/Ply
+        env:
+          CE_FSC_DLL: ${{ github.workspace }}/patched-fsc/fsc.dll
+          CECompatTreatWarningsAsErrors: ${{ env.CE_WARNISERROR }}
+        run: |
+          echo "Using compiler: $CE_FSC_DLL"
+          dotnet $CE_FSC_DLL --version
+          dotnet test --configuration Release 2>&1 | tee ../Ply-results.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results-ply
+          path: fsharp-mod-tests/Ply-results.txt
+          retention-days: 7
+
+  # ── IcedTasks ─────────────────────────────────────────────────────────────
+  # ValueTask / cancellableTask state machines.
+  test-icedtasks:
+    name: "Compat: IcedTasks"
+    needs: build-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout IcedTasks
+        uses: actions/checkout@v4
+        with:
+          repository: TheAngryByrd/IcedTasks
+          ref: master
+          path: fsharp-mod-tests/IcedTasks
+
+      - name: Download patched compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-compiler
+          path: patched-fsc
+
+      - name: Run IcedTasks tests
+        working-directory: fsharp-mod-tests/IcedTasks
+        env:
+          CE_FSC_DLL: ${{ github.workspace }}/patched-fsc/fsc.dll
+          CECompatTreatWarningsAsErrors: ${{ env.CE_WARNISERROR }}
+        run: |
+          echo "Using compiler: $CE_FSC_DLL"
+          dotnet $CE_FSC_DLL --version
+          dotnet test --configuration Release 2>&1 | tee ../IcedTasks-results.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results-icedtasks
+          path: fsharp-mod-tests/IcedTasks-results.txt
+          retention-days: 7
+
+  # ── Giraffe ────────────────────────────────────────────────────────────────
+  # Web DSL pipeline{} / task{} CE, HttpHandler chains.
+  test-giraffe:
+    name: "Compat: Giraffe"
+    needs: build-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Giraffe
+        uses: actions/checkout@v4
+        with:
+          repository: giraffe-fsharp/Giraffe
+          ref: master
+          path: fsharp-mod-tests/Giraffe
+
+      - name: Download patched compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-compiler
+          path: patched-fsc
+
+      - name: Run Giraffe tests
+        working-directory: fsharp-mod-tests/Giraffe
+        env:
+          CE_FSC_DLL: ${{ github.workspace }}/patched-fsc/fsc.dll
+          CECompatTreatWarningsAsErrors: ${{ env.CE_WARNISERROR }}
+        run: |
+          echo "Using compiler: $CE_FSC_DLL"
+          dotnet $CE_FSC_DLL --version
+          dotnet test --configuration Release 2>&1 | tee ../Giraffe-results.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results-giraffe
+          path: fsharp-mod-tests/Giraffe-results.txt
+          retention-days: 7
+
+  # ── Unquote ────────────────────────────────────────────────────────────────
+  # Quotation-based assertion library — validates CE quotation tree generation.
+  test-unquote:
+    name: "Compat: Unquote"
+    needs: build-compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout Unquote
+        uses: actions/checkout@v4
+        with:
+          repository: SwensenSoftware/unquote
+          ref: master
+          path: fsharp-mod-tests/Unquote
+
+      - name: Download patched compiler
+        uses: actions/download-artifact@v4
+        with:
+          name: patched-compiler
+          path: patched-fsc
+
+      - name: Run Unquote tests
+        working-directory: fsharp-mod-tests/Unquote
+        env:
+          CE_FSC_DLL: ${{ github.workspace }}/patched-fsc/fsc.dll
+          CECompatTreatWarningsAsErrors: ${{ env.CE_WARNISERROR }}
+        run: |
+          echo "Using compiler: $CE_FSC_DLL"
+          dotnet $CE_FSC_DLL --version
+          dotnet test --configuration Release 2>&1 | tee ../Unquote-results.txt
+          exit ${PIPESTATUS[0]}
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compat-results-unquote
+          path: fsharp-mod-tests/Unquote-results.txt
+          retention-days: 7
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # REPORT: aggregate all results and write a priority-ordered failure list.
+  # Runs even if individual library jobs failed (always()).
+  # ──────────────────────────────────────────────────────────────────────────
+  report:
+    name: Compatibility report
+    needs:
+      - build-compiler
+      - test-fsharplus
+      - test-fstoolkit
+      - test-ply
+      - test-icedtasks
+      - test-giraffe
+      - test-unquote
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Download all result artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: compat-results-*
+          merge-multiple: true
+          path: results/
+
+      - name: Build priority failure report
+        run: |
+          REPORT="ce-compat-report.md"
+          echo "# CE-Enhancements Compatibility Report" > "$REPORT"
+          echo "" >> "$REPORT"
+          echo "**Compiler version:** \`${{ needs.build-compiler.outputs.ce_version }}\`" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "## Summary" >> "$REPORT"
+          echo "" >> "$REPORT"
+          echo "| Library | Job result | Test failures |" >> "$REPORT"
+          echo "| ------- | ---------- | ------------- |" >> "$REPORT"
+
+          declare -A JOB_RESULTS=(
+            ["FSharpPlus"]="${{ needs.test-fsharplus.result }}"
+            ["FsToolkit.ErrorHandling"]="${{ needs.test-fstoolkit.result }}"
+            ["Ply"]="${{ needs.test-ply.result }}"
+            ["IcedTasks"]="${{ needs.test-icedtasks.result }}"
+            ["Giraffe"]="${{ needs.test-giraffe.result }}"
+            ["Unquote"]="${{ needs.test-unquote.result }}"
+          )
+
+          declare -A RESULT_FILES=(
+            ["FSharpPlus"]="results/FSharpPlus-results.txt"
+            ["FsToolkit.ErrorHandling"]="results/FsToolkit-results.txt"
+            ["Ply"]="results/Ply-results.txt"
+            ["IcedTasks"]="results/IcedTasks-results.txt"
+            ["Giraffe"]="results/Giraffe-results.txt"
+            ["Unquote"]="results/Unquote-results.txt"
+          )
+
+          FAILURE_COUNT=0
+          for LIB in FSharpPlus FsToolkit.ErrorHandling Ply IcedTasks Giraffe Unquote; do
+            RESULT="${JOB_RESULTS[$LIB]}"
+            RFILE="${RESULT_FILES[$LIB]}"
+            EMOJI="✅"
+            FAILS="0"
+            if [[ "$RESULT" != "success" ]]; then
+              EMOJI="❌"
+              FAILURE_COUNT=$((FAILURE_COUNT + 1))
+            fi
+            if [[ -f "$RFILE" ]]; then
+              FAILS=$(grep -c "Failed\|Error\|FAILED" "$RFILE" 2>/dev/null || echo "?")
+            fi
+            echo "| $LIB | $EMOJI $RESULT | $FAILS |" >> "$REPORT"
+          done
+
+          echo "" >> "$REPORT"
+
+          if [[ "$FAILURE_COUNT" -gt 0 ]]; then
+            echo "## Priority failure list" >> "$REPORT"
+            echo "" >> "$REPORT"
+            echo "The following libraries need investigation (highest priority first):" >> "$REPORT"
+            echo "" >> "$REPORT"
+            PRIO=1
+            for LIB in Ply IcedTasks FSharpPlus FsToolkit.ErrorHandling Giraffe Unquote; do
+              RESULT="${JOB_RESULTS[$LIB]}"
+              if [[ "$RESULT" != "success" ]]; then
+                RFILE="${RESULT_FILES[$LIB]}"
+                echo "### P$PRIO — $LIB" >> "$REPORT"
+                echo "" >> "$REPORT"
+                if [[ -f "$RFILE" ]]; then
+                  echo "\`\`\`" >> "$REPORT"
+                  grep -E "Failed|Error|error FS|warning FS" "$RFILE" | head -30 >> "$REPORT" || true
+                  echo "\`\`\`" >> "$REPORT"
+                fi
+                echo "" >> "$REPORT"
+                PRIO=$((PRIO + 1))
+              fi
+            done
+          else
+            echo "## All libraries passed ✅" >> "$REPORT"
+            echo "" >> "$REPORT"
+            echo "No regressions detected. The CE-Enhancements patch is compatible with all tested libraries." >> "$REPORT"
+          fi
+
+          cat "$REPORT"
+
+      - name: Write step summary
+        run: cat ce-compat-report.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload compatibility report
+        uses: actions/upload-artifact@v4
+        with:
+          name: ce-compat-report
+          path: ce-compat-report.md
+          retention-days: 30
+
+      - name: Fail if any library failed
+        if: |
+          needs.test-fsharplus.result == 'failure' ||
+          needs.test-fstoolkit.result == 'failure' ||
+          needs.test-ply.result == 'failure' ||
+          needs.test-icedtasks.result == 'failure' ||
+          needs.test-giraffe.result == 'failure' ||
+          needs.test-unquote.result == 'failure'
+        run: |
+          echo "::error::One or more external library compatibility tests failed."
+          echo "::error::See the ce-compat-report artifact for the prioritized failure list."
+          echo "::error::Fix the identified issues in the CE-Enhancements compiler before merging."
+          exit 1
