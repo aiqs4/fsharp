@@ -1,0 +1,3 @@
+[submodule "tests/fsharp-mod-tests"]
+	path = tests/fsharp-mod-tests
+	url = ../fsharp-mod-tests/

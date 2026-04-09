@@ -70,6 +70,9 @@ type LanguageFeature =
     | WhileBang
     | IfBang
     | ForBang
+    | WhileExpr
+    | ForExpr
+    | IfExpr
     | ReuseSameFieldsInStructUnions
     | ExtendedFixedBindings
     | PreferStringGetPinnableReference

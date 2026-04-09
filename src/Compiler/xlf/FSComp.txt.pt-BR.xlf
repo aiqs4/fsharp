@@ -437,6 +437,21 @@
         <target state="new">'for!' expression</target>
         <note />
       </trans-unit>
+      <trans-unit id="featureIfExpr">
+        <source>'IfExpr' builder method for unconstrained 'if' guard in computation expressions</source>
+        <target state="new">'IfExpr' builder method for unconstrained 'if' guard in computation expressions</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="featureForExpr">
+        <source>'ForExpr' builder method for unconstrained 'for' collection in computation expressions</source>
+        <target state="new">'ForExpr' builder method for unconstrained 'for' collection in computation expressions</target>
+        <note />
+      </trans-unit>
+      <trans-unit id="featureWhileExpr">
+        <source>'WhileExpr' builder method for unconstrained 'while' guard in computation expressions</source>
+        <target state="new">'WhileExpr' builder method for unconstrained 'while' guard in computation expressions</target>
+        <note />
+      </trans-unit>
       <trans-unit id="featureFromEndSlicing">
         <source>from-end slicing</source>
         <target state="translated">divisão começando no final</target>
