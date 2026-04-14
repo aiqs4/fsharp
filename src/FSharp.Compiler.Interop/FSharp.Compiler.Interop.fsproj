@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Copyright (c) Sascha Dewald. See https://github.com/fsharp-wasm/fsharp -->
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <TargetFrameworks>net10.0</TargetFrameworks>
+    <AssemblyName>FSharp.Compiler.Interop</AssemblyName>
+    <AllowCrossTargeting>true</AllowCrossTargeting>
+    <Configurations>Debug;Release</Configurations>
+  </PropertyGroup>
+
+  <!-- NET Interop wrapper library for nullability-safe wrappers for .NET BCL APIs -->
+  <PropertyGroup>
+    <NoOptimizationData>true</NoOptimizationData>
+    <NoInterfaceData>false</NoInterfaceData>
+    <CompressMetadata>true</CompressMetadata>
+    <Description>F# nullability-safe wrappers for .NET BCL APIs for strict null checking compatibility (net10.0+)</Description>
+  </PropertyGroup>
+
+  <!-- If building FCS solution directly, set paths explicitly -->
+  <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == 'true'">
+    <OutputPath>$(ArtifactsDir)/bin/$(MSBuildProjectName)/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>$(ArtifactsDir)obj/$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Helpers.fs" />
+    <Compile Include="String.fs" />
+    <Compile Include="Path.fs" />
+    <Compile Include="Directory.fs" />
+    <Compile Include="File.fs" />
+    <Compile Include="Encoding.fs" />
+    <Compile Include="Environment.fs" />
+    <Compile Include="Reflection.fs" />
+    <Compile Include="Collections.fs" />
+    <Compile Include="Threading.fs" />
+    <Compile Include="Tasks.fs" />
+    <Compile Include="Regex.fs" />
+    <Compile Include="Interlocked.fs" />
+    <Compile Include="Stopwatch.fs" />
+    <Compile Include="Monitor.fs" />
+  </ItemGroup>
+
+  <!-- <ItemGroup>
+    <ProjectReference Include="$(FSharpSourcesRoot)\FSharp.Core\FSharp.Core.fsproj" />
+  </ItemGroup> -->
+    <!-- <PackageReference Include="FSharp.Core" Version="$(FSharpCoreShippedPackageVersionValue)" /> -->
+
+<!-- 
+  <ItemGroup Condition="'$(FSHARPCORE_USE_PACKAGE)' != 'true'">
+    <ProjectReference Include="$(FSharpSourcesRoot)\FSharp.Core\FSharp.Core.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(FSHARPCORE_USE_PACKAGE)' == 'true'">
+    <PackageReference Include="FSharp.Core" Version="$(FSharpCoreShippedPackageVersionValue)" />
+  </ItemGroup> 
+-->
+
+</Project>
