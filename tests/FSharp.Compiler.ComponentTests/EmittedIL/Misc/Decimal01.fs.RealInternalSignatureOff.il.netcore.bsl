@@ -5,11 +5,6 @@
 
 .assembly extern runtime { }
 .assembly extern FSharp.Core { }
-.assembly extern netstandard
-{
-  .publickeytoken = (CC 7B 13 FF CD 2D DD 51 )                         
-  .ver 2:1:0:0
-}
 .assembly assembly
 {
   .custom instance void [FSharp.Core]Microsoft.FSharp.Core.FSharpInterfaceDataVersionAttribute::.ctor(int32,
@@ -57,17 +52,16 @@
     IL_0003:  ldc.i4.0
     IL_0004:  ldc.i4.0
     IL_0005:  ldc.i4.1
-    IL_0006:  newobj     instance void [netstandard]System.Decimal::.ctor(int32,
-                                                                          int32,
-                                                                          int32,
-                                                                          bool,
-                                                                          uint8)
+    IL_0006:  newobj     instance void [runtime]System.Decimal::.ctor(int32,
+                                                                             int32,
+                                                                             int32,
+                                                                             bool,
+                                                                             uint8)
     IL_000b:  pop
     IL_000c:  ret
   } 
 
 } 
-
 
 
 

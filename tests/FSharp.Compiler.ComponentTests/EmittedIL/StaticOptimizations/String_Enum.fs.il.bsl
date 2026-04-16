@@ -5,11 +5,6 @@
 
 .assembly extern runtime { }
 .assembly extern FSharp.Core { }
-.assembly extern netstandard
-{
-  .publickeytoken = (CC 7B 13 FF CD 2D DD 51 )                         
-  .ver 2:1:0:0
-}
 .assembly assembly
 {
   .custom instance void [FSharp.Core]Microsoft.FSharp.Core.FSharpInterfaceDataVersionAttribute::.ctor(int32,
@@ -123,7 +118,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/CharEnum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -136,7 +131,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/SByteEnum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -149,7 +144,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/Int16Enum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -162,7 +157,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/Int32Enum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -175,7 +170,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/Int64Enum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -188,7 +183,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/ByteEnum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -201,7 +196,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/UInt16Enum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -214,7 +209,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/UInt32Enum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -227,7 +222,7 @@
       IL_0001:  stloc.0
       IL_0002:  ldloca.s   V_0
       IL_0004:  constrained. assembly/String/UInt64Enum
-      IL_000a:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_000a:  callvirt   instance string [runtime]System.Object::ToString()
       IL_000f:  ret
     } 
 
@@ -256,9 +251,9 @@
       IL_001a:  stloc.1
       IL_001b:  ldloc.1
       IL_001c:  ldnull
-      IL_001d:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0022:  callvirt   instance string [netstandard]System.IFormattable::ToString(string,
-                                                                                      class [netstandard]System.IFormatProvider)
+      IL_001d:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0022:  callvirt   instance string [runtime]System.IFormattable::ToString(string,
+                                                                                         class [runtime]System.IFormatProvider)
       IL_0027:  stloc.2
       IL_0028:  ldloc.2
       IL_0029:  brtrue.s   IL_0031
@@ -276,7 +271,7 @@
       IL_003a:  stloc.3
       IL_003b:  ldloca.s   V_3
       IL_003d:  constrained. !!a
-      IL_0043:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_0043:  callvirt   instance string [runtime]System.Object::ToString()
       IL_0048:  stloc.2
       IL_0049:  ldloc.2
       IL_004a:  brtrue.s   IL_0052
@@ -313,9 +308,9 @@
       IL_001a:  stloc.1
       IL_001b:  ldloc.1
       IL_001c:  ldnull
-      IL_001d:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0022:  callvirt   instance string [netstandard]System.IFormattable::ToString(string,
-                                                                                      class [netstandard]System.IFormatProvider)
+      IL_001d:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0022:  callvirt   instance string [runtime]System.IFormattable::ToString(string,
+                                                                                         class [runtime]System.IFormatProvider)
       IL_0027:  stloc.2
       IL_0028:  ldloc.2
       IL_0029:  brtrue.s   IL_0031
@@ -333,7 +328,7 @@
       IL_003a:  stloc.3
       IL_003b:  ldloca.s   V_3
       IL_003d:  constrained. !!T
-      IL_0043:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_0043:  callvirt   instance string [runtime]System.Object::ToString()
       IL_0048:  stloc.2
       IL_0049:  ldloc.2
       IL_004a:  brtrue.s   IL_0052
@@ -370,9 +365,9 @@
       IL_001a:  stloc.1
       IL_001b:  ldloc.1
       IL_001c:  ldnull
-      IL_001d:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0022:  callvirt   instance string [netstandard]System.IFormattable::ToString(string,
-                                                                                      class [netstandard]System.IFormatProvider)
+      IL_001d:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0022:  callvirt   instance string [runtime]System.IFormattable::ToString(string,
+                                                                                         class [runtime]System.IFormatProvider)
       IL_0027:  stloc.2
       IL_0028:  ldloc.2
       IL_0029:  brtrue.s   IL_0031
@@ -390,7 +385,7 @@
       IL_003a:  stloc.3
       IL_003b:  ldloca.s   V_3
       IL_003d:  constrained. !!T
-      IL_0043:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_0043:  callvirt   instance string [runtime]System.Object::ToString()
       IL_0048:  stloc.2
       IL_0049:  ldloc.2
       IL_004a:  brtrue.s   IL_0052
@@ -427,9 +422,9 @@
       IL_001a:  stloc.1
       IL_001b:  ldloc.1
       IL_001c:  ldnull
-      IL_001d:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0022:  callvirt   instance string [netstandard]System.IFormattable::ToString(string,
-                                                                                      class [netstandard]System.IFormatProvider)
+      IL_001d:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0022:  callvirt   instance string [runtime]System.IFormattable::ToString(string,
+                                                                                         class [runtime]System.IFormatProvider)
       IL_0027:  stloc.2
       IL_0028:  ldloc.2
       IL_0029:  brtrue.s   IL_0031
@@ -447,7 +442,7 @@
       IL_003a:  stloc.3
       IL_003b:  ldloca.s   V_3
       IL_003d:  constrained. !!T
-      IL_0043:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_0043:  callvirt   instance string [runtime]System.Object::ToString()
       IL_0048:  stloc.2
       IL_0049:  ldloc.2
       IL_004a:  brtrue.s   IL_0052
@@ -487,9 +482,9 @@
       IL_001c:  stloc.2
       IL_001d:  ldloc.2
       IL_001e:  ldnull
-      IL_001f:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0024:  callvirt   instance string [netstandard]System.IFormattable::ToString(string,
-                                                                                      class [netstandard]System.IFormatProvider)
+      IL_001f:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0024:  callvirt   instance string [runtime]System.IFormattable::ToString(string,
+                                                                                         class [runtime]System.IFormatProvider)
       IL_0029:  stloc.3
       IL_002a:  ldloc.3
       IL_002b:  brtrue.s   IL_0033
@@ -507,7 +502,7 @@
       IL_003c:  stloc.s    V_4
       IL_003e:  ldloca.s   V_4
       IL_0040:  constrained. [runtime]System.Enum
-      IL_0046:  callvirt   instance string [netstandard]System.Object::ToString()
+      IL_0046:  callvirt   instance string [runtime]System.Object::ToString()
       IL_004b:  stloc.3
       IL_004c:  ldloc.3
       IL_004d:  brtrue.s   IL_0055
@@ -535,7 +530,6 @@
   } 
 
 } 
-
 
 
 
