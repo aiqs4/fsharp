@@ -89,7 +89,9 @@
       
       .maxstack  8
       IL_0000:  ldarg.1
-      IL_0001:  ret
+      IL_0001:  tail.
+      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.Unit>(!!0)
+      IL_0008:  ret
     } 
 
     .method private specialname rtspecialname static void  .cctor() cil managed
@@ -160,7 +162,7 @@
       .maxstack  8
       IL_0000:  ldarg.1
       IL_0001:  tail.
-      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<class [FSharp.Core]Microsoft.FSharp.Core.Unit,class [FSharp.Core]Microsoft.FSharp.Core.Unit>>(!!0)
+      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.Unit>(!!0)
       IL_0008:  ret
     } 
 
@@ -229,7 +231,9 @@
       
       .maxstack  8
       IL_0000:  ldarg.1
-      IL_0001:  ret
+      IL_0001:  tail.
+      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.Unit>(!!0)
+      IL_0008:  ret
     } 
 
     .method private specialname rtspecialname static void  .cctor() cil managed
@@ -300,7 +304,7 @@
       .maxstack  8
       IL_0000:  ldarg.1
       IL_0001:  tail.
-      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.FSharpFunc`2<class [FSharp.Core]Microsoft.FSharp.Core.Unit,class [FSharp.Core]Microsoft.FSharp.Core.Unit>>(!!0)
+      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.Unit>(!!0)
       IL_0008:  ret
     } 
 
@@ -369,7 +373,9 @@
       
       .maxstack  8
       IL_0000:  ldarg.1
-      IL_0001:  ret
+      IL_0001:  tail.
+      IL_0003:  call       !!0 [FSharp.Core]Microsoft.FSharp.Core.Operators::Identity<class [FSharp.Core]Microsoft.FSharp.Core.Unit>(!!0)
+      IL_0008:  ret
     } 
 
     .method private specialname rtspecialname static void  .cctor() cil managed

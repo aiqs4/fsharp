@@ -5,10 +5,10 @@
 
 .assembly extern runtime { }
 .assembly extern FSharp.Core { }
-.assembly extern netstandard
+.assembly extern System.Threading
 {
-  .publickeytoken = (CC 7B 13 FF CD 2D DD 51 )                         
-  .ver 2:1:0:0
+  .publickeytoken = (B0 3F 5F 7F 11 D5 0A 3A )                         
+  .ver 10:0:0:0
 }
 .assembly assembly
 {
@@ -98,11 +98,11 @@
     IL_000b:  stsfld     bool '<StartupCode$assembly>'.$assembly::lockTaken@1
     .try
     {
-      IL_0010:  call       object assembly::get_o()
-      IL_0015:  ldsflda    bool '<StartupCode$assembly>'.$assembly::lockTaken@1
-      IL_001a:  call       void [netstandard]System.Threading.Monitor::Enter(object,
-                                                                             bool&)
-      IL_001f:  leave.s    IL_0034
+      IL_0014:  ldloc.1
+      IL_0015:  ldloca.s   V_2
+      IL_0017:  call       void [System.Threading]System.Threading.Monitor::Enter(object,
+                                                                                  bool&)
+      IL_001c:  leave.s    IL_0029
 
     }  
     finally
@@ -110,16 +110,15 @@
       IL_0021:  call       bool assembly::get_lockTaken@1()
       IL_0026:  brfalse.s  IL_0033
 
-      IL_0028:  call       object assembly::get_o()
-      IL_002d:  call       void [netstandard]System.Threading.Monitor::Exit(object)
-      IL_0032:  endfinally
-      IL_0033:  endfinally
+      IL_0021:  ldloc.1
+      IL_0022:  call       void [System.Threading]System.Threading.Monitor::Exit(object)
+      IL_0027:  endfinally
+      IL_0028:  endfinally
     }  
     IL_0034:  ret
   } 
 
 } 
-
 
 
 
