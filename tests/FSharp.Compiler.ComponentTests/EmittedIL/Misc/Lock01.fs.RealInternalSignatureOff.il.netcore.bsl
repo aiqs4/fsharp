@@ -5,10 +5,10 @@
 
 .assembly extern runtime { }
 .assembly extern FSharp.Core { }
-.assembly extern netstandard
+.assembly extern System.Threading
 {
-  .publickeytoken = (CC 7B 13 FF CD 2D DD 51 )                         
-  .ver 2:1:0:0
+  .publickeytoken = (B0 3F 5F 7F 11 D5 0A 3A )                         
+  .ver 10:0:0:0
 }
 .assembly assembly
 {
@@ -21,16 +21,6 @@
 
   .hash algorithm 0x00008004
   .ver 0:0:0:0
-}
-.mresource public FSharpSignatureCompressedData.assembly
-{
-  
-  
-}
-.mresource public FSharpOptimizationCompressedData.assembly
-{
-  
-  
 }
 .module assembly.exe
 
@@ -48,8 +38,7 @@
        extends [runtime]System.Object
 {
   .custom instance void [FSharp.Core]Microsoft.FSharp.Core.CompilationMappingAttribute::.ctor(valuetype [FSharp.Core]Microsoft.FSharp.Core.SourceConstructFlags) = ( 01 00 07 00 00 00 00 00 ) 
-  .method public specialname static object 
-          get_o() cil managed
+  .method public specialname static object get_o() cil managed
   {
     
     .maxstack  8
@@ -93,8 +82,8 @@
     {
       IL_0014:  ldloc.1
       IL_0015:  ldloca.s   V_2
-      IL_0017:  call       void [netstandard]System.Threading.Monitor::Enter(object,
-                                                                             bool&)
+      IL_0017:  call       void [System.Threading]System.Threading.Monitor::Enter(object,
+                                                                                  bool&)
       IL_001c:  leave.s    IL_0029
 
     }  
@@ -104,7 +93,7 @@
       IL_001f:  brfalse.s  IL_0028
 
       IL_0021:  ldloc.1
-      IL_0022:  call       void [netstandard]System.Threading.Monitor::Exit(object)
+      IL_0022:  call       void [System.Threading]System.Threading.Monitor::Exit(object)
       IL_0027:  endfinally
       IL_0028:  endfinally
     }  
@@ -112,7 +101,6 @@
   } 
 
 } 
-
 
 
 

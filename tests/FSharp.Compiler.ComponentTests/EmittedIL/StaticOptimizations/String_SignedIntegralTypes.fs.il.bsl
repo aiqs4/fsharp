@@ -5,11 +5,6 @@
 
 .assembly extern runtime { }
 .assembly extern FSharp.Core { }
-.assembly extern netstandard
-{
-  .publickeytoken = (CC 7B 13 FF CD 2D DD 51 )                         
-  .ver 2:1:0:0
-}
 .assembly assembly
 {
   .custom instance void [FSharp.Core]Microsoft.FSharp.Core.FSharpInterfaceDataVersionAttribute::.ctor(int32,
@@ -48,9 +43,9 @@
       .maxstack  8
       IL_0000:  ldarga.s   'value'
       IL_0002:  ldnull
-      IL_0003:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0008:  call       instance string [netstandard]System.SByte::ToString(string,
-                                                                               class [netstandard]System.IFormatProvider)
+      IL_0003:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0008:  call       instance string [runtime]System.SByte::ToString(string,
+                                                                                  class [runtime]System.IFormatProvider)
       IL_000d:  ret
     } 
 
@@ -60,9 +55,9 @@
       .maxstack  8
       IL_0000:  ldarga.s   'value'
       IL_0002:  ldnull
-      IL_0003:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0008:  call       instance string [netstandard]System.Int16::ToString(string,
-                                                                               class [netstandard]System.IFormatProvider)
+      IL_0003:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0008:  call       instance string [runtime]System.Int16::ToString(string,
+                                                                                  class [runtime]System.IFormatProvider)
       IL_000d:  ret
     } 
 
@@ -72,9 +67,9 @@
       .maxstack  8
       IL_0000:  ldarga.s   'value'
       IL_0002:  ldnull
-      IL_0003:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0008:  call       instance string [netstandard]System.Int32::ToString(string,
-                                                                               class [netstandard]System.IFormatProvider)
+      IL_0003:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0008:  call       instance string [runtime]System.Int32::ToString(string,
+                                                                                  class [runtime]System.IFormatProvider)
       IL_000d:  ret
     } 
 
@@ -84,9 +79,9 @@
       .maxstack  8
       IL_0000:  ldarga.s   'value'
       IL_0002:  ldnull
-      IL_0003:  call       class [netstandard]System.Globalization.CultureInfo [netstandard]System.Globalization.CultureInfo::get_InvariantCulture()
-      IL_0008:  call       instance string [netstandard]System.Int64::ToString(string,
-                                                                               class [netstandard]System.IFormatProvider)
+      IL_0003:  call       class [runtime]System.Globalization.CultureInfo [runtime]System.Globalization.CultureInfo::get_InvariantCulture()
+      IL_0008:  call       instance string [runtime]System.Int64::ToString(string,
+                                                                                  class [runtime]System.IFormatProvider)
       IL_000d:  ret
     } 
 
@@ -106,7 +101,6 @@
   } 
 
 } 
-
 
 
 

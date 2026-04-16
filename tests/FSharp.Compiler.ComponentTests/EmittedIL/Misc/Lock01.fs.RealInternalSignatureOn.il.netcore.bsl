@@ -5,10 +5,10 @@
 
 .assembly extern runtime { }
 .assembly extern FSharp.Core { }
-.assembly extern netstandard
+.assembly extern System.Threading
 {
-  .publickeytoken = (CC 7B 13 FF CD 2D DD 51 )                         
-  .ver 2:1:0:0
+  .publickeytoken = (B0 3F 5F 7F 11 D5 0A 3A )                         
+  .ver 10:0:0:0
 }
 .assembly assembly
 {
@@ -75,8 +75,8 @@
     {
       IL_0012:  ldloc.0
       IL_0013:  ldloca.s   V_1
-      IL_0015:  call       void [netstandard]System.Threading.Monitor::Enter(object,
-                                                                             bool&)
+      IL_0015:  call       void [System.Threading]System.Threading.Monitor::Enter(object,
+                                                                                  bool&)
       IL_001a:  leave.s    IL_0027
 
     }  
@@ -86,7 +86,7 @@
       IL_001d:  brfalse.s  IL_0026
 
       IL_001f:  ldloc.0
-      IL_0020:  call       void [netstandard]System.Threading.Monitor::Exit(object)
+      IL_0020:  call       void [System.Threading]System.Threading.Monitor::Exit(object)
       IL_0025:  endfinally
       IL_0026:  endfinally
     }  
