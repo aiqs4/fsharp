@@ -32,7 +32,7 @@ module ILVerifierModule =
                 let profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
                 $"""{profile}/.nuget/packages"""
             | path -> path
-        let peverifyFullArgs = [ yield "exec"; yield $"""{nuget_packages}/dotnet-ilverify/9.0.0/tools/net9.0/any/ILVerify.dll"""; yield "--verbose"; yield dllFilePath; yield! peverifierArgs ]
+        let peverifyFullArgs = [ yield "exec"; yield $"""{nuget_packages}/dotnet-ilverify/10.0.5/tools/net10.0/any/ILVerify.dll"""; yield "--verbose"; yield dllFilePath; yield! peverifierArgs ]
         let workingDirectory = Path.GetDirectoryName dllFilePath
         let exitCode, outputText, errorText =
             let peverifierCommandPath = Path.ChangeExtension(dllFilePath, ".peverifierCommandPath.cmd")

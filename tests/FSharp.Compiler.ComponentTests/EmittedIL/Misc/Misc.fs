@@ -175,7 +175,9 @@ module Misc =
         compilation
         |> getCompilation
         |>asLibrary
+        #if !NET10_0_OR_GREATER
         |>asNetStandard20
+        #endif
         |>verifyCompilation
 
     // SOURCE=Marshal.fs                   SCFLAGS="-g --test:EmitFeeFeeAs100001 --optimize-" COMPILE_ONLY=1 POSTCMD="..\\CompareIL.cmd Marshal.exe"  # Marshal.fs

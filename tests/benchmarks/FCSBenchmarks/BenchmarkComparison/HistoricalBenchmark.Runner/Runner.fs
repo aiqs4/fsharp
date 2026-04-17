@@ -147,7 +147,7 @@ module NuGet =
         downloadPackage v
         let settings = Settings.LoadDefaultSettings(null)
         let globalPackagesFolder = SettingsUtility.GetGlobalPackagesFolder(settings)
-        let path = Path.Combine(globalPackagesFolder, packageId, v.OriginalVersion, "lib", "netstandard2.0", "FSharp.Compiler.Service.dll")
+        let path = Path.Combine(globalPackagesFolder, packageId, v.OriginalVersion, "lib", "net10.0", "FSharp.Compiler.Service.dll")
         let vi = FileVersionInfo.GetVersionInfo(path)
         let pv = vi.ProductVersion
         match Regex.Match(pv, "\+([a-zA-Z0-9]+)$") with
@@ -232,7 +232,7 @@ module Git =
             printfn $"{revision} already checked out in {dir}"
     
     let private fcsDllPath (checkoutDir : string) =
-        Path.Combine(checkoutDir, "artifacts/bin/FSharp.Compiler.Service/Release/netstandard2.0/FSharp.Compiler.Service.dll")
+        Path.Combine(checkoutDir, "artifacts/bin/FSharp.Compiler.Service/Release/net10.0/FSharp.Compiler.Service.dll")
         
     let private fsharpCoreDllPath (rootDir : string) =
         (fcsDllPath rootDir).Replace("FSharp.Compiler.Service.dll", "FSharp.Core.dll")

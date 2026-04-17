@@ -237,12 +237,39 @@ module rec Compiler =
         let ilBslFilePath =
             let ilBslPaths = [|
                 for baselineSuffix in ilBaselineSuffixes do
-#if NETCOREAPP
+#if DEBUG
+    #if NET10_0_OR_GREATER
+                    // Prefer net10 baselines, then fall back to netcore for backward compatibility
+                    yield sourceFilePath + baselineSuffix + ".il.net10.debug.bsl"
+                    yield sourceFilePath + baselineSuffix + ".il.net10.bsl"
+    #endif
+    #if NETCOREAPP
+                    yield sourceFilePath + baselineSuffix + ".il.netcore.debug.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.netcore.bsl"
 #else
                     yield sourceFilePath + baselineSuffix + ".il.net472.bsl"
 #endif
                     yield sourceFilePath + baselineSuffix + ".il.bsl"
+                    // Fall back to netstandard baseline for comparison
+                    yield sourceFilePath + baselineSuffix + ".il.netstandard.bsl"
+#else
+    #if NET10_0_OR_GREATER
+                    // Prefer net10 baselines, then fall back to netcore for backward compatibility
+                    yield sourceFilePath + baselineSuffix + ".il.net10.release.bsl"
+                    yield sourceFilePath + baselineSuffix + ".il.net10.bsl"
+    #endif
+    #if NETCOREAPP
+                    yield sourceFilePath + baselineSuffix + ".il.netcore.release.bsl"
+                    yield sourceFilePath + baselineSuffix + ".il.netcore.bsl"
+    #else
+                    yield sourceFilePath + baselineSuffix + ".il.net472.release.bsl"
+                    yield sourceFilePath + baselineSuffix + ".il.net472.bsl"
+    #endif
+                    yield sourceFilePath + baselineSuffix + ".il.release.bsl"
+                    yield sourceFilePath + baselineSuffix + ".il.bsl"
+                    // Fall back to netstandard baseline for comparison
+                    yield sourceFilePath + baselineSuffix + ".il.netstandard.bsl"
+#endif
                 |]
 
             let findBaseline =
@@ -1334,7 +1361,13 @@ Actual:
         | CompilationResult.Success s ->
             match s.OutputPath with
             | None -> failwith "Operation didn't produce any output!"
+            #if NET10_0_OR_GREATER
+            | Some p -> 
+                il |> List.map (fun s -> s.Replace("[netstandard]System", "[runtime]System"))
+                   |> func p
+            #else
             | Some p -> func p il
+            #endif
         | CompilationResult.Failure f -> failwith $"Result should be \"Success\" in order to get IL. Failure: {Environment.NewLine}{f}"
 
     let verifyILContains expected result : CompilationResult =

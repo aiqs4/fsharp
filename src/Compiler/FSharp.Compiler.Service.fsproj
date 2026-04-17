@@ -3,7 +3,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFrameworks>netstandard2.0</TargetFrameworks>
+    <TargetFrameworks>$(FSharpNetCoreProductTargetFramework)</TargetFrameworks>
     <OutputType>Library</OutputType>
     <NoWarn>$(NoWarn);44</NoWarn> <!-- Obsolete -->
     <NoWarn>$(NoWarn);57</NoWarn> <!-- Experimental -->
@@ -585,7 +585,7 @@
     <Compile Include="Legacy\LegacyHostedCompilerForTesting.fs" Condition="'$(MonoPackaging)' != 'true'" />
   </ItemGroup>
 
-  <ItemGroup>
+  <ItemGroup Condition="'$(OS)' != 'Windows_NT'">
     <None Include="default.win32manifest">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>

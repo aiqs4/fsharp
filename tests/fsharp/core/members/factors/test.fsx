@@ -33,12 +33,15 @@ type Matrix = M of int
    member x.Item with get((i:int),(j:int)) = 0.0
   end
   
+#if !NETCORE
 module Types = begin
+  open System.Collections.Generic
   /// Shorthand notation for .NET 2.0 Lists
   type ResizeArray<'a> = List<'a>
 end
 
 open Types
+#endif
 module ResizeArray = begin
   /// Iterates the function f for every element of the ResizeArray.
   let iter f (r:ResizeArray<_>) = r.ForEach (fun x -> f x)

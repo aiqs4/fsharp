@@ -16,6 +16,7 @@ open FSharp.Test
 type LangVersion =
     | V80
     | V90
+    | V100
     | Preview
     | Latest
 
@@ -37,9 +38,10 @@ type FSharpScript(?additionalArgs: string[], ?quiet: bool, ?langVersion: LangVer
         if quiet then "--quiet"
         match langVersion with
         | LangVersion.Preview -> "--langversion:preview"
-        | LangVersion.Latest -> "--langversion:latest"
-        | LangVersion.V80 -> "--langversion:8.0"
-        | LangVersion.V90 -> "--langversion:9.0"
+        | LangVersion.Latest  -> "--langversion:latest"
+        | LangVersion.V80     -> "--langversion:8.0"
+        | LangVersion.V90     -> "--langversion:9.0"
+        | LangVersion.V100    -> "--langversion:10.0"
         |]
 
     let argv = Array.append baseArgs additionalArgs

@@ -32,6 +32,10 @@ module ScriptRunner =
 #if NETCOREAPP
           "NETCOREAPP"
 #endif
+// fixme: this shouldn't be hardcoded ! or? how does the above work?
+#if NET10_0_OR_GREATER
+          "NET10_0_OR_GREATER"
+#endif
         ]
 
     let runScriptFile version sessionIsolation (cu:CompilationUnit) =
@@ -80,12 +84,28 @@ module TestFrameworkAdapter =
             |> typecheck
             |> withResultsMatchingFile baseline ]
         |> List.head
-            
 
-    let adjustVersion version bonusArgs = 
-        match version with 
+
+    let adjustVersion version bonusArgs =
+        let version =
+            match Environment.GetEnvironmentVariable("FSHARP_SUITE_LANGVERSION") with
+            | null
+            | "" -> version
+            | "8"
+            | "8.0" -> LangVersion.V80
+            | "9"
+            | "9.0" -> LangVersion.V90
+            | "10"
+            | "10.0" -> LangVersion.V100
+            | "preview" -> LangVersion.Preview
+            | "latest" -> LangVersion.Latest
+            | value -> failwith $"Unsupported FSHARP_SUITE_LANGVERSION value: {value}"
+
+
+        match version with
         | LangVersion.V80 -> "8.0",bonusArgs
         | LangVersion.V90 -> "9.0",bonusArgs
+        | LangVersion.V100 -> "10.0",bonusArgs
         | LangVersion.Preview -> "preview",bonusArgs
         | LangVersion.Latest  -> "latest", bonusArgs
 
@@ -167,6 +187,6 @@ module TestFrameworkAdapter =
 
     let singleVersionedNegTestAux folder bonusArgs version testName =
         singleTestBuildAndRunAuxVersion folder bonusArgs  (NEG_TEST_BUILD testName) version ScriptSessionIsolation.Shared
-    let singleVersionedNegTest (folder:string)  (version:LangVersion) (testName:string) = 
+    let singleVersionedNegTest (folder:string)  (version:LangVersion) (testName:string) =
         singleVersionedNegTestAux folder [] version testName
     let singleNegTest folder testName = singleVersionedNegTest folder LangVersion.Latest testName

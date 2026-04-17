@@ -78,7 +78,7 @@ let diamondAssembly () =
 let globalNamespace () =
     let cfg = testConfig "typeProviders/globalNamespace"
 
-    csc cfg """/out:globalNamespaceTP.dll /debug+ /target:library /r:netstandard.dll /r:"%s" """ cfg.FSCOREDLLPATH ["globalNamespaceTP.cs"]
+    csc cfg """/out:globalNamespaceTP.dll /debug+ /target:library /r:System.Runtime.dll /r:"%s" """ cfg.FSCOREDLLPATH ["globalNamespaceTP.cs"]
 
     fsc cfg "%s /debug+ /r:globalNamespaceTP.dll /optimize-" cfg.fsc_flags ["test.fsx"]
 
@@ -166,7 +166,7 @@ let helloWorldCSharp () =
 
     rm cfg "provider.dll"
 
-    csc cfg """/out:provider.dll /target:library "/r:%s" /r:netstandard.dll /r:magic.dll""" cfg.FSCOREDLLPATH ["provider.cs"]
+    csc cfg """/out:provider.dll /target:library "/r:%s" /r:System.Runtime.dll /r:magic.dll""" cfg.FSCOREDLLPATH ["provider.cs"]
 
     fsc cfg "%s /debug+ /r:provider.dll /optimize-" cfg.fsc_flags ["test.fsx"]
 
@@ -309,7 +309,9 @@ let splitAssembly subdir project =
           subdir ++ "fsharp41" ++ "net45"
           // include up one directory
           ".." ++ subdir ++ "fsharp41" ++ "net45"
-          subdir ++ "fsharp41" ++ "netstandard2.0" ]
+          subdir ++ "fsharp41" ++ "netstandard2.0" 
+          subdir ++ "fsharp41" ++ "netstandard2.1"
+          subdir ++ "fsharp41" ++ "net10.0" ]
 
     for dir in someLoadPaths do
 

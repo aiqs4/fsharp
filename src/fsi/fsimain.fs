@@ -373,30 +373,5 @@ let MainMain argv =
                 stats.rawMemoryFileCount
                 stats.weakByteFileCount)
 
-#if FSI_SHADOW_COPY_REFERENCES
-    let isShadowCopy x =
-        (x = "/shadowcopyreferences"
-         || x = "--shadowcopyreferences"
-         || x = "/shadowcopyreferences+"
-         || x = "--shadowcopyreferences+")
-
-    let executeFsi shadowCopyFiles =
-        if shadowCopyFiles then
-            let setupInformation = AppDomain.CurrentDomain.SetupInformation
-            setupInformation.ShadowCopyFiles <- "true"
-            let helper = AppDomain.CreateDomain("FSI_Domain", null, setupInformation)
-            helper.ExecuteAssemblyByName(Assembly.GetExecutingAssembly().GetName())
-        else
-            evaluateSession (argv)
-
-    let tryShadowCopy =
-        AppDomain.CurrentDomain.IsDefaultAppDomain()
-        && argv |> Array.exists isShadowCopy
-
-    try
-        executeFsi tryShadowCopy
-    with :? FileLoadException ->
-        executeFsi false
-#else
     evaluateSession (argv)
-#endif
+

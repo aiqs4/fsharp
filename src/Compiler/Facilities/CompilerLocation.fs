@@ -249,8 +249,8 @@ module internal FSharpEnvironment =
     let getFSharpCompilerLocationWithDefaultFromType (defaultLocation: Type) =
         let location =
             try
-                let directory = Path.GetDirectoryName(defaultLocation.Assembly.Location)
-                Option.ofObj (directory)
+                Path.GetDirectoryName(defaultLocation.Assembly.Location)
+                |> Option.ofObj
             with _ ->
                 None
 

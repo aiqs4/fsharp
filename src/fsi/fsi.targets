@@ -10,10 +10,6 @@
     <Win32Resource>$(MSBuildThisFileDirectory)fsi.res</Win32Resource>
   </PropertyGroup>
 
-  <PropertyGroup Condition="'$(TargetFramework)' == 'net472'">
-    <DefineConstants>$(DefineConstants);FSI_SHADOW_COPY_REFERENCES;FSI_SERVER</DefineConstants>
-  </PropertyGroup>
-
   <!--  The fsi application does not provide a referencable public interface  -->
   <PropertyGroup>
     <NoOptimizationData>true</NoOptimizationData>
@@ -46,14 +42,6 @@
   <ItemGroup>
     <ProjectReference Include="$(MSBuildThisFileDirectory)..\Compiler\FSharp.Compiler.Service.fsproj" />
     <ProjectReference Include="$(MSBuildThisFileDirectory)..\FSharp.Compiler.Interactive.Settings\FSharp.Compiler.Interactive.Settings.fsproj" />
-  </ItemGroup>
-
-  <ItemGroup Condition="'$(TargetFramework)' == 'net472'">
-    <Reference Include="System.Drawing" />
-    <Reference Include="System.Windows.Forms" />
-    <Reference Include="PresentationCore" />
-    <Reference Include="PresentationFramework" />
-    <Reference Include="WindowsBase" />
   </ItemGroup>
 
   <ItemGroup>

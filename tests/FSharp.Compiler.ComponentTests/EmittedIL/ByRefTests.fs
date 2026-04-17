@@ -293,6 +293,7 @@ type C() =
         |> verifyIL [verifyProperty;verifyMethod]
         |> ignore
 
+#if !NET10_0_OR_GREATER
     [<Fact>]
     let ``Returning an 'inref<_>' from a property should emit System.Runtime.CompilerServices.IsReadOnlyAttribute on the return type of the signature and generate the `` () =
         let src =
@@ -388,6 +389,7 @@ type C() =
         |> compile
         |> verifyIL [verifyProperty;verifyMethod;verifyIsReadOnlyAttribute]
         |> ignore
+#endif
 
     [<Fact>]
     let ``Returning an 'inref<_>' from a generic method should emit System.Runtime.CompilerServices.IsReadOnlyAttribute on the return type of the signature`` () =
@@ -410,6 +412,8 @@ type C<'T>() =
         |> verifyIL [verifyMethod]
         |> ignore
 
+
+#if !NET10_0_OR_GREATER
     [<Fact>]
     let ``Returning an 'inref<_>' from a generic method should emit System.Runtime.CompilerServices.IsReadOnlyAttribute on the return type of the signature - Source contains ReadOnlyAttribute`` () =
         let src =
@@ -435,7 +439,7 @@ module Test =
         |> asNetStandard20
         |> compile
         |> verifyIL [verifyMethod]
-
+#endif
 
     [<Fact>]
     let ``Returning an 'inref<_>' from an abstract generic method should emit System.Runtime.CompilerServices.IsReadOnlyAttribute on the return type of the signature`` () =

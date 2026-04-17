@@ -334,6 +334,7 @@ and Compilation =
             Compilation(sources, output, options, targetFramework, cmplRefs, name, outputDirectory)
 
 module CompilerAssertHelpers =
+    open System.Runtime.InteropServices
 
     let uniqueName =
         let mutable counter = 0
@@ -454,12 +455,16 @@ module CompilerAssertHelpers =
         { defaultProjectOptions targetFramework with SourceFiles = [| path |] }
 
     let rawCompile outputFilePath isExe options (targetFramework: TargetFramework) (sources: SourceCodeFileKind list) =
+        let isWin = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
         let args =
             [|
                 yield "fsc.dll"
                 for item in sources do
                     yield item.GetSourceFileName
                 yield "-o:" + outputFilePath
+
+                yield! (if isWin then [] else ["--nowin32manifest"])
+
                 yield (if isExe then "--target:exe" else "--target:library")
                 yield! (defaultProjectOptions targetFramework).OtherOptions
                 yield! options
@@ -643,6 +648,9 @@ module CompilerAssertHelpers =
         "framework": {{
             "name": "Microsoft.NETCore.App",
             "version": "{runtimeVersion}"
+        }},
+        "configProperties": {{
+            "System.Globalization.Invariant": false
         }}
     }}
 }}"""
