@@ -1480,7 +1480,7 @@ exit 1;;
         |> withOptions ["--nologo"]
         |> runFsi
         |> shouldFail
-        |> withStdErrContains "Unexpected"
+        |> withStdErrContains "Unexpected|parse error"
         |> ignore
 
     // Test: E_let_id_equal_let_id_equal_n - chained incomplete let

@@ -8,6 +8,7 @@ open System.Globalization
 open System.IO
 open System.Reflection
 open System.Text
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 open Internal.Utilities
@@ -47,7 +48,7 @@ type public Fsi() as this =
     let mutable toolPath: string =
         let locationOfThisDll =
             try
-                Some(Path.GetDirectoryName(typeof<Fsi>.Assembly.Location))
+                Path.getDirectoryName (typeof<Fsi>.Assembly.Location)
             with _ ->
                 None
 
@@ -180,7 +181,7 @@ type public Fsi() as this =
     [<Output>]
     member this.TextOutput =
         if this.CaptureTextOutput then
-            textOutput.Value |> String.concat Environment.NewLine
+            textOutput.Value |> FSharp.Core.String.concat Environment.NewLine
         else
             String.Empty
 
@@ -311,13 +312,13 @@ type public Fsi() as this =
 
     override _.StandardErrorEncoding =
         if utf8output then
-            Encoding.UTF8
+            Encoding.utf8
         else
             base.StandardErrorEncoding
 
     override _.StandardOutputEncoding =
         if utf8output then
-            Encoding.UTF8
+            Encoding.utf8
         else
             base.StandardOutputEncoding
 
@@ -325,7 +326,7 @@ type public Fsi() as this =
         if toolPath = "" then
             raise (new System.InvalidOperationException(FSBuild.SR.toolpathUnknown ()))
 
-        System.IO.Path.Combine(toolPath, fsi.ToolExe)
+        Path.combine2 toolPath fsi.ToolExe
 
     override fsi.LogToolCommand(message: string) =
         fsi.Log.LogMessageFromText(message, MessageImportance.Normal) |> ignore
@@ -409,7 +410,7 @@ type public Fsi() as this =
 
     override _.GenerateResponseFileCommands() =
         let builder = generateCommandLineBuilder ()
-        builder.GetCapturedArguments() |> String.concat Environment.NewLine
+        builder.GetCapturedArguments() |> FSharp.Core.String.concat Environment.NewLine
 
     // expose this to internal components (for unit testing)
     member internal fsi.InternalGenerateCommandLineCommands() = fsi.GenerateCommandLineCommands()

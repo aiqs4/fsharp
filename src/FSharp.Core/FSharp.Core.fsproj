@@ -4,8 +4,8 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFrameworks Condition="'$(Configuration)' == 'Proto'">netstandard2.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(Configuration)' != 'Proto'">netstandard2.0;netstandard2.1</TargetFrameworks>
+    <!-- Support net10.0 with strict null checking PLUS legacy frameworks for compatibility -->
+    <TargetFrameworks>net10.0</TargetFrameworks>
     <NoWarn>$(NoWarn);75</NoWarn> <!-- InternalCommandLineOption -->
     <NoWarn>$(NoWarn);1204</NoWarn> <!-- This construct is for use in the FSharp.Core library and should not be used directly -->
     <AllowCrossTargeting>true</AllowCrossTargeting>
@@ -60,23 +60,12 @@
       <Link>FSCore.resx</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="ILLink.Substitutions.xml" LogicalName="ILLink.Substitutions.xml" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(Configuration)' == 'Proto' or '$(BUILDING_USING_DOTNET)' == 'true'">
-    <!-- This can be removed once CompileBefore support is shipped in an rtm release -->
     <CompileBefore Include="prim-types-prelude.fsi">
       <Link>Primitives/prim-types-prelude.fsi</Link>
     </CompileBefore>
     <CompileBefore Include="prim-types-prelude.fs">
       <Link>Primitives/prim-types-prelude.fs</Link>
     </CompileBefore>
-  </ItemGroup>
-  <ItemGroup Condition="'$(Configuration)' != 'Proto' and '$(BUILDING_USING_DOTNET)' != 'true'">
-    <Compile Include="prim-types-prelude.fsi" CompileOrder="CompileFirst">
-      <Link>Primitives/prim-types-prelude.fsi</Link>
-    </Compile>
-    <Compile Include="prim-types-prelude.fs" CompileOrder="CompileFirst">
-      <Link>Primitives/prim-types-prelude.fs</Link>
-    </Compile>
   </ItemGroup>
   <ItemGroup>
     <Compile Include="prim-types.fsi">

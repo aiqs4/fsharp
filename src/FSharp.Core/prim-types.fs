@@ -442,6 +442,8 @@ namespace System.Diagnostics.CodeAnalysis
 
         member this.DynamicallyAccessedMembersAttribute(memberTypes: DynamicallyAccessedMemberTypes) =
             this.MemberTypes <- memberTypes
+#endif
+
 
 namespace Microsoft.FSharp.Core
     open System
@@ -449,7 +451,6 @@ namespace Microsoft.FSharp.Core
     open System.Collections.Generic
     open System.Globalization
     open System.Reflection
-    #endif
 
     [<MeasureAnnotatedAbbreviation>] type float<[<Measure>] 'Measure> = float 
     [<MeasureAnnotatedAbbreviation>] type float32<[<Measure>] 'Measure> = float32
@@ -4095,6 +4096,7 @@ namespace Microsoft.FSharp.Core
 
     and 'T voption = ValueOption<'T>
 
+#if !NET8_0_OR_GREATER
 // These attributes only exist in .NET 8 and up.
 namespace System.Runtime.CompilerServices
     open System
@@ -4111,6 +4113,8 @@ namespace System.Runtime.CompilerServices
     [<AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)>]
     type internal ScopedRefAttribute () =
         inherit Attribute ()
+#endif
+
 
 namespace Microsoft.FSharp.Collections
 
@@ -4128,7 +4132,7 @@ namespace Microsoft.FSharp.Collections
     open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicFunctions
     open Microsoft.FSharp.Core.BasicInlinedOperations
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     [<System.Runtime.CompilerServices.CollectionBuilder(typeof<List>, "Create")>]
 #endif
     [<DefaultAugmentation(false)>]
@@ -4156,7 +4160,7 @@ namespace Microsoft.FSharp.Collections
         
     and 'T list = List<'T>
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     and [<CompilerMessage("This type is for compiler use and should not be used directly", 1204, IsHidden=true);
           Sealed;
           AbstractClass;

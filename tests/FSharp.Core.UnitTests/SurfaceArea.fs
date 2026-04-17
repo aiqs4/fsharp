@@ -19,24 +19,35 @@ type SurfaceAreaTest() =
     //    export TEST_UPDATE_BSL=1
     [<Fact>]
     member this.VerifySurfaceAreaFSharpCore () : unit =
-        let platform =
+        let assembly = typeof<int list>.Assembly
 
-// We are testing the surface area of the FSharp.Core assembly.
-// NETCOREAPP builds with netstandard2.1
-// Net472 builds with netstandard1.0
-//
-#if NETCOREAPP
-            "netstandard21"
-#else
-            "netstandard20"
-#endif
+        // Determine platform by trying baseline files in order (net first, then netstandard fallback)
         let flavor =
 #if DEBUG
             "debug"
 #else
             "release"
 #endif
-        let assembly = typeof<int list>.Assembly
-        let baseline = Path.Combine(__SOURCE_DIRECTORY__, $"FSharp.Core.SurfaceArea.{platform}.{flavor}.bsl")
-        let outFileName = Path.Combine(Path.GetDirectoryName(assembly.Location), $"FSharp.Core.SurfaceArea.{platform}.{flavor}.out")
+
+        let tryFindBaseline (dir: string) (patterns: string list) =
+            patterns
+            |> List.tryFind (fun pattern -> File.Exists(Path.Combine(dir, pattern)))
+            |> Option.map (fun pattern -> Path.Combine(dir, pattern), pattern)
+
+        let dir = __SOURCE_DIRECTORY__
+        let possibleBaselines = [
+            $"FSharp.Core.SurfaceArea.net10.0.{flavor}.bsl"      // Prefer net10
+            $"FSharp.Core.SurfaceArea.netstandard21.{flavor}.bsl" // Fallback to netstandard21
+            $"FSharp.Core.SurfaceArea.netstandard20.{flavor}.bsl" // Fallback to netstandard20
+        ]
+
+        let (baseline, _) =
+            match tryFindBaseline dir possibleBaselines with
+            | Some result -> result
+            | None ->
+                // If no baseline found, use net10 (will fail with proper error message)
+                (Path.Combine(dir, $"FSharp.Core.SurfaceArea.net10.0.{flavor}.bsl"),
+                 $"FSharp.Core.SurfaceArea.net10.0.{flavor}.bsl")
+
+        let outFileName = Path.Combine(Path.GetDirectoryName(assembly.Location), $"FSharp.Core.SurfaceArea.net10.0.{flavor}.out")
         SurfaceArea.verify assembly baseline outFileName

@@ -285,7 +285,7 @@ type ResolveDependenciesResult
     member _.StdError = stdError
 
     /// The resolution paths - the full paths to selected resolved dll's.
-    /// In scripts this is equivalent to #r @"c:\somepath\to\packages\ResolvedPackage\1.1.1\lib\netstandard2.0\ResolvedAssembly.dll"
+    /// In scripts this is equivalent to #r @"c:\somepath\to\packages\ResolvedPackage\1.1.1\lib\net10.0\ResolvedAssembly.dll"
     member _.Resolutions = resolutions
 
     /// The source code file paths

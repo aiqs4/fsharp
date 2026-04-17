@@ -107,8 +107,11 @@ type QueryBuilder() =
     member _.Head (source: QuerySource<'T, 'Q>) =
         Enumerable.First source.Source
 
-    member _.Nth (source: QuerySource<'T, 'Q>, index) =
+    member _.Nth (source: QuerySource<'T, 'Q>, index: int) =
         Enumerable.ElementAt (source.Source, index)
+
+    // member _.Nth (source: QuerySource<'T, 'Q>, index: System.Index) =
+    //     Enumerable.ElementAt (source.Source, index)
 
     member _.Skip (source: QuerySource<'T, 'Q>, count) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.Skip (source.Source, count))
@@ -116,8 +119,11 @@ type QueryBuilder() =
     member _.SkipWhile (source: QuerySource<'T, 'Q>, predicate) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.SkipWhile (source.Source, Func<_, _>(predicate)))
 
-    member _.Take (source: QuerySource<'T, 'Q>, count) : QuerySource<'T, 'Q> =
+    member _.Take (source: QuerySource<'T, 'Q>, count: int) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.Take (source.Source, count))
+
+    // member _.Take (source: QuerySource<'T, 'Q>, range: System.Range) : QuerySource<'T, 'Q> =
+    //     QuerySource (Enumerable.Take (source.Source, range))
 
     member _.TakeWhile (source: QuerySource<'T, 'Q>, predicate) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.TakeWhile (source.Source, Func<_, _>(predicate)))
@@ -475,8 +481,8 @@ module Query =
         MakeOrCallContainsOrElementAt FQ FE
 
     let MakeElementAt, CallElementAt =
-        let FQ = methodhandleof (fun (x, y) -> Queryable.ElementAt(x, y))
-        let FE = methodhandleof (fun (x, y) -> Enumerable.ElementAt(x, y))
+        let FQ = methodhandleof (fun (x, (y: int)) -> Queryable.ElementAt(x, y))
+        let FE = methodhandleof (fun (x, (y: int)) -> Enumerable.ElementAt(x, y))
         MakeOrCallContainsOrElementAt FQ FE
 
     let MakeOrCallMinByOrMaxBy FQ FE =
@@ -886,8 +892,8 @@ module Query =
 
     let MakeTake =
         MakeSkipOrTake
-            (methodhandleof (fun (x, y) -> Queryable.Take (x, y)))
-            (methodhandleof (fun (x, y) -> Enumerable.Take (x, y)))
+            (methodhandleof (fun (x, (y: int)) -> Queryable.Take (x, y)))
+            (methodhandleof (fun (x, (y: int)) -> Enumerable.Take (x, y)))
 
     let MakeSkipWhile =
         GenMakeSkipWhileOrTakeWhile
@@ -1109,13 +1115,13 @@ module Query =
 
     let (|CallDistinct|_|) = (|SpecificCall1|_|) (methodhandleof (fun (query:QueryBuilder, keySelector) -> query.Distinct keySelector))
 
-    let (|CallTake|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Take(arg1, arg2)))
+    let (|CallTake|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, (arg2: int)) -> query.Take(arg1, arg2)))
 
     let (|CallTakeWhile|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.TakeWhile(arg1, arg2)))
 
     let (|CallContains|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Contains(arg1, arg2)))
 
-    let (|CallNth|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Nth(arg1, arg2)))
+    let (|CallNth|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, (arg2: int)) -> query.Nth(arg1, arg2)))
 
     let (|CallSkip|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Skip(arg1, arg2)))
 

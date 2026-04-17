@@ -116,17 +116,9 @@ module internal FSharpEnvironment =
     let toolingCompatibleVersions =
         if typeof<obj>.Assembly.GetName().Name = "mscorlib" then
             [|
-                "net481"
-                "net48"
-                "net472"
-                "net471"
-                "net47"
-                "net462"
-                "net461"
-                "net452"
-                "net451"
-                "net45"
                 "netstandard2.0"
+                "netstandard2.1"
+                "net10.0"
             |]
         elif typeof<obj>.Assembly.GetName().Name = "System.Private.CoreLib" then
             let productMajor = FSharp.BuildProperties.fsProductTfmMajorVersion
@@ -136,13 +128,9 @@ module internal FSharpEnvironment =
                 for v in max productMajor runningMajor .. -1 .. 5 -> $"net{v}.0"
                 yield!
                     [|
-                        "netcoreapp3.1"
-                        "netcoreapp3.0"
-                        "netstandard2.1"
-                        "netcoreapp2.2"
-                        "netcoreapp2.1"
-                        "netcoreapp2.0"
                         "netstandard2.0"
+                        "netstandard2.1"
+                        "net10.0"
                     |]
             |]
         else
@@ -249,8 +237,9 @@ module internal FSharpEnvironment =
     let getFSharpCompilerLocationWithDefaultFromType (defaultLocation: Type) =
         let location =
             try
-                let directory = Path.GetDirectoryName(defaultLocation.Assembly.Location)
-                Option.ofObj (directory)
+                Path.GetDirectoryName(defaultLocation.Assembly.Location)
+                |> Option.ofObj
+                // |> Option.filter (fun s -> not (isNull s))
             with _ ->
                 None
 

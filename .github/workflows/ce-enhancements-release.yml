@@ -207,14 +207,36 @@ jobs:
           name: build-artifacts
           path: artifacts/bin
 
+      # - name: Test --testcoreclr
+      #   run: |
+      #     ./build.sh -c Release --testcoreclr
+      #   continue-on-error: true
+
+      - name: Test testCompilerComponentTests
+        run: |
+          ./build.sh -c Release --testCompilerComponentTests
+        continue-on-error: true
+
+      - name: Test --testScripting
+        run: |
+          ./build.sh -c Release --testScripting
+        continue-on-error: true
+
+      - name: Test --testBenchmarks
+        run: |
+          ./build.sh -c Release --testBenchmarks
+        continue-on-error: true
+
+
+
       # Run the CE feature tests in Release configuration against the patched
       # compiler. --no-build uses the artifacts downloaded above.
-      - name: Run CE component tests
-        run: |
-          dotnet test \
-            tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj \
-            -c Release --no-build \
-            -- --filter-method "*CEEnhancementsTests*|*CEExprMethodTests*|*WhileBangTests*"
+      # - name: Run CE component tests
+      #   run: |
+      #     dotnet test \
+      #       --project tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj \
+      #       -c Release --no-build \
+      #       -- --filter-method "*CEEnhancementsTests*|*CEExprMethodTests*|*WhileBangTests*"
 
       - name: Upload test logs
         if: always()

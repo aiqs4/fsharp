@@ -1008,6 +1008,7 @@ namespace Microsoft.FSharp.Core.CompilerServices
     [<CompilerMessage("This type is for compiler use and should not be used directly", 1204, IsHidden = true)>]
     type SupportsWhenTEnum = class end
 
+#if !NET5_0_OR_GREATER
 namespace System.Diagnostics.CodeAnalysis
 
     open System
@@ -1046,6 +1047,7 @@ namespace System.Diagnostics.CodeAnalysis
         inherit Attribute
         new: DynamicallyAccessedMemberTypes -> DynamicallyAccessedMembersAttribute
         member MemberTypes: DynamicallyAccessedMemberTypes
+#endif
 
 namespace Microsoft.FSharp.Core
 
@@ -2600,6 +2602,7 @@ namespace Microsoft.FSharp.Core
       /// Represents an Error or a Failure. The code failed with a value of 'TError representing what went wrong.
       | Error of ErrorValue:'TError
 
+#if !NET8_0_OR_GREATER
 // These attributes only exist in .NET 8 and up.
 namespace System.Runtime.CompilerServices
     open System
@@ -2632,6 +2635,7 @@ namespace System.Runtime.CompilerServices
     type internal ScopedRefAttribute =
         inherit Attribute
         new: unit -> ScopedRefAttribute
+#endif
 
 namespace Microsoft.FSharp.Collections
 
@@ -2649,7 +2653,7 @@ namespace Microsoft.FSharp.Collections
     /// </remarks>
     ///
     /// <exclude />
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     [<System.Runtime.CompilerServices.CollectionBuilder(typeof<List>, "Create")>]
 #endif
     [<DefaultAugmentation(false)>]
@@ -2725,7 +2729,7 @@ namespace Microsoft.FSharp.Collections
     /// </remarks>
     and 'T list = List<'T>
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     /// <summary>Contains methods for compiler use related to lists.</summary>
     and [<CompilerMessage("This type is for compiler use and should not be used directly", 1204, IsHidden=true);
           Sealed;

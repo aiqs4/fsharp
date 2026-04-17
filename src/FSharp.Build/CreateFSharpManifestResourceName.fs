@@ -4,6 +4,7 @@ namespace FSharp.Build
 
 open System
 open System.IO
+open FSharp.Compiler.Interop
 open Microsoft.Build.Tasks
 
 type CreateFSharpManifestResourceName public () =
@@ -54,6 +55,6 @@ type CreateFSharpManifestResourceName public () =
             cSharpResult
 
     override _.IsSourceFile(fileName: string) =
-        let extension = Path.GetExtension(fileName)
+        let extension = Path.getExtension fileName |> Option.defaultValue ""
 
         String.Equals(extension, ".fs", StringComparison.OrdinalIgnoreCase)

@@ -239,6 +239,8 @@ module rec Compiler =
                 for baselineSuffix in ilBaselineSuffixes do
 #if DEBUG
     #if NETCOREAPP
+                    // Prefer net10 baselines, then fall back to netcore for backward compatibility
+                    yield sourceFilePath + baselineSuffix + ".il.net10.debug.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.netcore.debug.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.netcore.bsl"
     #else
@@ -247,8 +249,12 @@ module rec Compiler =
     #endif
                     yield sourceFilePath + baselineSuffix + ".il.debug.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.bsl"
+                    // Fall back to netstandard baseline for comparison
+                    yield sourceFilePath + baselineSuffix + ".il.netstandard.bsl"
 #else
     #if NETCOREAPP
+                    // Prefer net10 baselines, then fall back to netcore for backward compatibility
+                    yield sourceFilePath + baselineSuffix + ".il.net10.release.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.netcore.release.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.netcore.bsl"
     #else
@@ -257,6 +263,8 @@ module rec Compiler =
     #endif
                     yield sourceFilePath + baselineSuffix + ".il.release.bsl"
                     yield sourceFilePath + baselineSuffix + ".il.bsl"
+                    // Fall back to netstandard baseline for comparison
+                    yield sourceFilePath + baselineSuffix + ".il.netstandard.bsl"
 #endif
                 |]
 

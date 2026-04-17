@@ -180,14 +180,3 @@ module Settings =
 
     [<assembly: AutoOpen("FSharp.Compiler.Interactive.Settings")>]
     do ()
-
-// For legacy compatibility with old naming
-namespace Microsoft.FSharp.Compiler.Interactive
-
-type IEventLoop = FSharp.Compiler.Interactive.IEventLoop
-
-type InteractiveSession = FSharp.Compiler.Interactive.InteractiveSession
-
-module Settings =
-
-    let fsi = FSharp.Compiler.Interactive.Settings.fsi

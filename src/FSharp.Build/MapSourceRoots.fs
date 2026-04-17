@@ -2,6 +2,7 @@ namespace FSharp.Build
 
 open System
 open System.IO
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 open System.Collections.Generic
@@ -22,7 +23,7 @@ module Utilities =
     /// Copied from msbuild. ItemSpecs are normalized using this method.
     /// </summary>
     let FixFilePath (path: string) =
-        if String.IsNullOrEmpty(path) || Path.DirectorySeparatorChar = '\\' then
+        if String.isNullOrEmpty path || Path.directorySeparatorChar = '\\' then
             path
         else
             path.Replace('\\', '/')
@@ -75,8 +76,8 @@ type MapSourceRoots() =
         else
             let endChar = path.[path.Length - 1]
 
-            endChar = Path.DirectorySeparatorChar
-            || endChar = Path.AltDirectorySeparatorChar
+            endChar = Path.directorySeparatorChar
+            || endChar = Path.altDirectorySeparatorChar
 
     static let reportConflictingWellKnownMetadata (log: TaskLoggingHelper) (l: ITaskItem) (r: ITaskItem) =
         for name in knownMetadataNames do

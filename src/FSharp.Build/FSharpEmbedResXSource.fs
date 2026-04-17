@@ -7,6 +7,7 @@ open System.IO
 open System.Linq
 open System.Text
 open System.Xml.Linq
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
@@ -43,14 +44,14 @@ module internal {1} =
     let generateSource (resx: string) (fullModuleName: string) (generateLegacy: bool) (generateLiteral: bool) =
         try
             let printMessage fmt = Printf.ksprintf this.Log.LogMessage fmt
-            let justFileName = Path.GetFileNameWithoutExtension(resx)
-            let sourcePath = Path.Combine(_outputPath, justFileName + ".fs")
+            let justFileName = Path.getFileNameWithoutExtension resx |> Option.defaultValue ""
+            let sourcePath = Path.combine2 _outputPath (justFileName + ".fs")
 
             // simple up-to-date check
             if
-                File.Exists(resx)
-                && File.Exists(sourcePath)
-                && File.GetLastWriteTimeUtc(resx) <= File.GetLastWriteTimeUtc(sourcePath)
+                File.exists resx
+                && File.exists sourcePath
+                && File.getLastWriteTimeUtc resx <= File.getLastWriteTimeUtc sourcePath
             then
                 printMessage "Skipping generation: '%s' since it is up-to-date." sourcePath
                 Some(sourcePath)
@@ -120,7 +121,7 @@ module internal {1} =
                             sb.AppendLine().Append(commentBody).AppendLine(accessorBody))
                         sb
 
-                File.WriteAllText(sourcePath, body.ToString())
+                File.writeAllText sourcePath (body.ToString())
                 printMessage "Done: %s" sourcePath
                 Some(sourcePath)
         with e ->
@@ -164,7 +165,7 @@ module internal {1} =
                             let moduleName =
                                 match item.GetMetadata("GeneratedModuleName") with
                                 | null
-                                | "" -> Path.GetFileNameWithoutExtension(item.ItemSpec)
+                                | "" -> Path.getFileNameWithoutExtension item.ItemSpec |> Option.defaultValue ""
                                 | value -> value
 
                             let generateLegacy = getBooleanMetadata "GenerateLegacyCode" false item
