@@ -164,10 +164,10 @@ module Commands =
 #endif
 
     let csc exec cscExe flags srcFiles =
-        exec cscExe (sprintf "%s %s  /reference:netstandard.dll" flags (srcFiles |> Seq.ofList |> String.concat " "))
+        exec cscExe (sprintf "%s %s  /reference:System.Runtime.dll" flags (srcFiles |> Seq.ofList |> String.concat " "))
 
     let vbc exec vbcExe flags srcFiles =
-        exec vbcExe (sprintf "%s %s  /reference:netstandard.dll" flags (srcFiles |> Seq.ofList |> String.concat " "))
+        exec vbcExe (sprintf "%s %s  /reference:System.Runtime.dll" flags (srcFiles |> Seq.ofList |> String.concat " "))
 
     let fsi exec fsiExe flags sources =
         exec fsiExe (sprintf "%s %s"  flags (sources |> Seq.ofList |> String.concat " "))
@@ -296,9 +296,9 @@ let ilasmVersion = getMsbuildPropValue versionsPropsDoc "MicrosoftNETCoreILAsmVe
 
 let config configurationName envVars =
 
-    let fsharpCoreArchitecture = "netstandard2.0"
-    let fsharpBuildArchitecture = "netstandard2.0"
-    let fsharpCompilerInteractiveSettingsArchitecture = "netstandard2.0"
+    let fsharpCoreArchitecture = "net10.0"
+    let fsharpBuildArchitecture = "net10.0"
+    let fsharpCompilerInteractiveSettingsArchitecture = "net10.0"
     let dotnetArchitecture = productTfm
 #if NET472
     let fscArchitecture = "net472"

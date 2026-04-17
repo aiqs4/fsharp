@@ -3695,11 +3695,11 @@ let _ = MyType().DoNothing()
     // TestTP is built as part of the solution — no NuGet restore needed.
     let tpDLL =
         __SOURCE_DIRECTORY__
-        + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/netstandard2.0/TestTP.dll"
+        + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/net10.0/TestTP.dll"
 
     let csDLL =
         __SOURCE_DIRECTORY__
-        + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/netstandard2.0/CSharp_Analysis.dll"
+        + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/net10.0/CSharp_Analysis.dll"
 
     let options =
         lazy

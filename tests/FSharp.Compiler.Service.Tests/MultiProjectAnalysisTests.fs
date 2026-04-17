@@ -823,8 +823,8 @@ module GenerativeTypeProviderFallbackTest =
     let ``In-memory cross-project references to projects using generative type provides should fallback to on-disk references`` () =
             
         // The type provider and its dependency are compiled as part of the solution build
-        let csDLL = __SOURCE_DIRECTORY__ + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/netstandard2.0/CSharp_Analysis.dll"
-        let tpDLL = __SOURCE_DIRECTORY__ + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/netstandard2.0/TestTP.dll"
+        let csDLL = __SOURCE_DIRECTORY__ + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/net10.0/CSharp_Analysis.dll"
+        let tpDLL = __SOURCE_DIRECTORY__ + $"/../../artifacts/bin/TestTP/{testBuildConfiguration}/net10.0/TestTP.dll"
         // These two projects should have been built before the test executes
         if not (File.Exists csDLL) then 
             failwith $"expect {csDLL} to exist"
@@ -841,7 +841,7 @@ module GenerativeTypeProviderFallbackTest =
                     OtherOptions =
                      [|yield "--simpleresolution"
                        yield "--noframework"
-                       yield "--out:" + __SOURCE_DIRECTORY__ + @"/../../artifacts/bin/TestProject/Debug/netstandard2.0/TestProject.dll"
+                       yield "--out:" + __SOURCE_DIRECTORY__ + @"/../../artifacts/bin/TestProject/Debug/net10.0/TestProject.dll"
                        yield "--doc:" + __SOURCE_DIRECTORY__ ++ @"../service/data/TestProject/bin/Debug/TestProject.xml"
                        yield "--subsystemversion:6.00"
                        yield "--highentropyva+"
@@ -949,8 +949,8 @@ module GenerativeTypeProviderFallbackTest =
         // compiled to disk.  In this case, we expect no error, because even though TestProject uses a generative
         // type provider, the in-memory cross-reference is ignored and an on-disk reference is used instead.
         begin
-            let testProjectCompiledOutput = __SOURCE_DIRECTORY__ ++ @"../service/data/TestProject/netstandard2.0/TestProject.dll"
-            if not (File.Exists testProjectCompiledOutput) then 
+            let testProjectCompiledOutput = __SOURCE_DIRECTORY__ ++ @"../service/data/TestProject/net10.0/TestProject.dll"
+            if not (File.Exists testProjectCompiledOutput) then
                 failwith $"expect {testProjectCompiledOutput} to exist"
             let options = optionsTestProject2 testProjectCompiledOutput
             let fileName = __SOURCE_DIRECTORY__ ++ @"../service/data/TestProject2/TestProject2.fs"

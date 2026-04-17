@@ -32,6 +32,10 @@ module ScriptRunner =
 #if NETCOREAPP
           "NETCOREAPP"
 #endif
+// fixme: this shouldn't be hardcoded ! or? how does the above work?
+#if NET10_0_OR_GREATER
+          "NET10_0_OR_GREATER"
+#endif
         ]
 
     let runScriptFile version sessionIsolation (cu:CompilationUnit) =

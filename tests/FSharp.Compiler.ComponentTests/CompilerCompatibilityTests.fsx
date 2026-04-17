@@ -137,8 +137,8 @@ let testScenarios = [
     ("latest", "local", "Forward compatibility - Library with SDK, app with local")
     ("local", "latest", "Backward compatibility - Library with local, app with SDK")
     ("latest", "latest", "SDK only - Both library and app built with latest SDK")
-    ("net9", "local", "Net9 forward compatibility - Library with .NET 9 SDK, app with local")
-    ("local", "net9", "Net9 backward compatibility - Library with local, app with .NET 9 SDK")
+    ("net10", "local", "Net10 forward compatibility - Library with .NET 10 SDK, app with local")
+    ("local", "net10", "Net10 backward compatibility - Library with local, app with .NET 10 SDK")
 ]
 
 // Helper functions
@@ -190,12 +190,12 @@ let cleanBinObjDirectories projectPath =
 
 let manageGlobalJson compilerVersion enable =
     let globalJsonPath = Path.Combine(projectsPath, "global.json")
-    if compilerVersion = "net9" then
-        if enable && not (File.Exists(globalJsonPath) && File.ReadAllText(globalJsonPath).Contains("9.0.0")) then
-            printfn "  Enabling .NET 9 SDK via global.json..."
+    if compilerVersion = "net10" then
+        if enable && not (File.Exists(globalJsonPath) && File.ReadAllText(globalJsonPath).Contains("10.0.0")) then
+            printfn "  Enabling .NET 10 SDK via global.json..."
             let globalJsonContent = """{
   "sdk": {
-    "version": "9.0.0",
+    "version": "10.0.0",
     "rollForward": "latestMajor"
   },
   "msbuild-sdks": {
@@ -217,7 +217,7 @@ let packProject projectPath compilerVersion outputDir =
         ("PackageVersion", $"1.0.{timestamp}")
     ]
     
-    // Manage global.json for net9 compiler
+    // Manage global.json for net10 compiler
     manageGlobalJson compilerVersion true
     
     printfn "  Packing library with %s compiler..." compilerVersion
@@ -236,7 +236,7 @@ let buildApp projectPath compilerVersion =
         ("LocalFSharpCompilerConfiguration", compilerConfiguration)
     ]
     
-    // Manage global.json for net9 compiler
+    // Manage global.json for net10 compiler
     manageGlobalJson compilerVersion true
     
     printfn "  Building app with %s compiler..." compilerVersion
@@ -287,7 +287,7 @@ let verifyOutput libCompilerVersion appCompilerVersion (output: string) =
     let libIsLocal = getBool "Library Build Info:" "Is Local Build:"
     let appIsLocal = getBool "Application Build Info:" "Is Local Build:"
     
-    // Verify - both "latest" and "net9" should result in isLocalBuild=false
+    // Verify - both "latest" and "net10" should result in isLocalBuild=false
     let expectedLibIsLocal = (libCompilerVersion = "local")
     let expectedAppIsLocal = (appCompilerVersion = "local")
     

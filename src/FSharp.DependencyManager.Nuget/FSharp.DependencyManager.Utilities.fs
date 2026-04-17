@@ -167,7 +167,7 @@ module internal Utilities =
 
         result |> List.ofSeq |> List.map split
 
-    let executeTool pathToExe arguments workingDir environment timeout =
+    let executeTool pathToExe arguments workingDir environment (timeout: int) =
         match pathToExe with
         | Some path ->
             let errorsList = ResizeArray()
@@ -224,7 +224,7 @@ module internal Utilities =
                 let path =
                     match path with
                     | Some path -> path // specific file
-                    | None -> Path.Combine(Path.GetDirectoryName(projectPath), "msbuild.binlog") // auto-generated file
+                    | None -> Path.Combine(Path.GetDirectoryName(projectPath: string), "msbuild.binlog") // auto-generated file
 
                 sprintf "/bl:\"%s\"" path
             | None -> ""

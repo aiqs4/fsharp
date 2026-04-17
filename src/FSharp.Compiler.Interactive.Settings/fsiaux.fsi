@@ -75,14 +75,3 @@ module Settings =
 
     /// <summary>The settings associated with the interactive session.</summary>
     val fsi: InteractiveSession
-
-// For legacy compatibility with old naming
-namespace Microsoft.FSharp.Compiler.Interactive
-
-type IEventLoop = FSharp.Compiler.Interactive.IEventLoop
-
-type InteractiveSession = FSharp.Compiler.Interactive.InteractiveSession
-
-module Settings =
-
-    val fsi: InteractiveSession

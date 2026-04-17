@@ -174,7 +174,9 @@ module Misc =
         compilation
         |> getCompilation
         |>asLibrary
+        #if !NET10_0_OR_GREATER
         |>asNetStandard20
+        #endif
         |>verifyCompilation
 
     // Regression test: a debug point landing while a value-type constructor's 'this' pointer

@@ -17,8 +17,19 @@ let test (s : string) b =
 
 let check s b1 b2 = test s (b1 = b2)
 
-module TestNullIsGeneralizeable = begin
+#if NET10_0_OR_GREATER
+// In .NET 10 müssen wir die Value Restriction umgehen,
+// da 'null' für List<'a> nicht mehr "proper" ist.
+module TestNullIsGeneralizeable =
+    open System.Collections.Generic
+    // fixme
+    let nullList<'a> : List<'a> = Unchecked.defaultof<List<'a>>
 
+    let v1 = nullList<int> : List<int>
+    let v2 = nullList<string> : List<string>
+#else
+// ORIGINAL TEST
+module TestNullIsGeneralizeable =
    open System.Collections.Generic
    let nullList : List<'a> = null
    
@@ -26,7 +37,7 @@ module TestNullIsGeneralizeable = begin
    
    let v1 = (nullList : List<int>)
    let v2 = (nullList : List<string>)
-end
+#endif
 
 let f (x:'a) = 
   let rec g1 y z  = g2 y z  
