@@ -29,6 +29,7 @@ on:
   push:
     branches:
       - features/ce-enhancements-desugaring
+      - develop-cleanup
     tags:
       # Convention: ce/v43.12.100  or  ce/v43.12.100-ce-enhancements
       - 'ce/v[0-9]+.[0-9]+.[0-9]+*'

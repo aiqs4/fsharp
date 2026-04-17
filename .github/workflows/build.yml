@@ -1,0 +1,179 @@
+name: Build Compiler (fsharp-zero)
+
+# on:
+#   push:
+#     branches: [ develop-cleanup, main ]
+#   pull_request:
+#     branches: [ develop-cleanup, main ]
+
+jobs:
+  build:
+    name: Build Compiler
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-id: ${{ steps.upload.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore FSharp.Compiler.Service.sln
+
+      - name: Build Compiler (Debug)
+        run: |
+          dotnet build FSharp.Compiler.Service.sln -c Debug --no-restore
+          dotnet build tests/FSharp.Test.Utilities/FSharp.Test.Utilities.fsproj -c Debug --no-restore
+
+      - name: Build Compiler (Release)
+        run: dotnet build FSharp.Compiler.Service.sln -c Release --no-restore
+
+      - name: Create fsharp-zero artifact
+        run: |
+          mkdir -p artifacts/fsharp-zero
+          cp -r artifacts/bin/FSharp.Core/Release/net10.0/* artifacts/fsharp-zero/ || true
+          cp -r artifacts/bin/FSharp.Compiler.Service/Release/net10.0/* artifacts/fsharp-zero/ || true
+          cp -r artifacts/bin/FSharp.Compiler.Interactive.Settings/Release/net10.0/* artifacts/fsharp-zero/ || true
+          ls -la artifacts/fsharp-zero/
+
+      - name: Upload fsharp-zero artifact
+        uses: actions/upload-artifact@v4
+        id: upload
+        with:
+          name: fsharp-zero
+          path: artifacts/fsharp-zero/
+          retention-days: 30
+
+      - name: Save artifact ID for downstream jobs
+        run: echo "ARTIFACT_ID=${{ steps.upload.outputs.artifact-id }}" >> $GITHUB_ENV
+
+  component-tests:
+    name: Component Tests
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        test-category:
+          - EmittedIL
+          - Conformance
+          - ErrorMessages
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Download fsharp-zero artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fsharp-zero
+          path: ./artifacts/fsharp-zero/
+
+      - name: Build Component Tests
+        run: dotnet build tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj -c Debug --no-restore
+
+      - name: Run ${{ matrix.test-category }} tests
+        run: dotnet test --project tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj -c Debug --filter "${{ matrix.test-category }}" --logger "console;verbosity=minimal" --no-build
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.test-category }}
+          path: artifacts/TestResults/
+          retention-days: 7
+
+  interactive-tests:
+    name: Interactive/FSI Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Download fsharp-zero artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fsharp-zero
+          path: ./artifacts/fsharp-zero/
+
+      - name: Build Component Tests
+        run: dotnet build tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj -c Debug --no-restore
+
+      - name: Run InteractiveSession tests
+        run: dotnet test --project tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj -c Debug --filter "InteractiveSession" --logger "console;verbosity=minimal" --no-build
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-interactive
+          path: artifacts/TestResults/
+          retention-days: 7
+
+  miscellaneous-tests:
+    name: Miscellaneous Tests
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Download fsharp-zero artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: fsharp-zero
+          path: ./artifacts/fsharp-zero/
+
+      - name: Build Component Tests
+        run: dotnet build tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj -c Debug --no-restore
+
+      - name: Run Miscellaneous tests
+        run: dotnet test --project tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj -c Debug --filter "Miscellaneous" --logger "console;verbosity=minimal" --no-build
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-miscellaneous
+          path: artifacts/TestResults/
+          retention-days: 7
+
+  test-summary:
+    name: Test Summary
+    if: always()
+    needs: [component-tests, interactive-tests, miscellaneous-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          path: all-test-results/
+
+      - name: Generate test summary
+        run: |
+          echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          find all-test-results -name "*.trx" | wc -l | xargs echo "Total test result files:" >> $GITHUB_STEP_SUMMARY
