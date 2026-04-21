@@ -93,7 +93,7 @@ type TaskBuilderBase =
     member inline TryWith:
         body: TaskCode<'TOverall, 'T> * catch: (exn -> TaskCode<'TOverall, 'T>) -> TaskCode<'TOverall, 'T>
 
-#if NETSTANDARD2_1
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     /// <summary>
     /// Specifies a unit of task code which binds to the resource implementing IAsyncDisposable and disposes it asynchronously
     /// </summary>
