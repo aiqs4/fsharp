@@ -1008,6 +1008,7 @@ namespace Microsoft.FSharp.Core.CompilerServices
     [<CompilerMessage("This type is for compiler use and should not be used directly", 1204, IsHidden = true)>]
     type SupportsWhenTEnum = class end
 
+#if !NET5_0_OR_GREATER
 namespace System.Diagnostics.CodeAnalysis
 
     open System
@@ -1046,6 +1047,25 @@ namespace System.Diagnostics.CodeAnalysis
         inherit Attribute
         new: DynamicallyAccessedMemberTypes -> DynamicallyAccessedMembersAttribute
         member MemberTypes: DynamicallyAccessedMemberTypes
+#endif
+
+#if !NET7_0_OR_GREATER
+namespace System.Diagnostics.CodeAnalysis
+
+    open System
+    open Microsoft.FSharp.Core
+
+    /// <summary>
+    /// Indicates that the specified member requires the ability to generate new code at runtime.
+    /// </summary>
+    [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Constructor ||| AttributeTargets.Method,
+                     Inherited = false)>]
+    type internal RequiresDynamicCodeAttribute =
+        inherit Attribute
+        new: string -> RequiresDynamicCodeAttribute
+        member Message: string
+
+#endif
 
 namespace Microsoft.FSharp.Core
 
@@ -2605,6 +2625,7 @@ namespace Microsoft.FSharp.Core
       /// Represents an Error or a Failure. The code failed with a value of 'TError representing what went wrong.
       | Error of ErrorValue:'TError
 
+#if !NET8_0_OR_GREATER
 // These attributes only exist in .NET 8 and up.
 namespace System.Runtime.CompilerServices
     open System

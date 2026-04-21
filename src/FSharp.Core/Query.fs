@@ -110,6 +110,9 @@ type QueryBuilder() =
     member _.Nth (source: QuerySource<'T, 'Q>, index) =
         Enumerable.ElementAt (source.Source, index)
 
+    // member _.Nth (source: QuerySource<'T, 'Q>, index: System.Index) =
+    //     Enumerable.ElementAt (source.Source, index)
+
     member _.Skip (source: QuerySource<'T, 'Q>, count) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.Skip (source.Source, count))
 
@@ -118,6 +121,9 @@ type QueryBuilder() =
 
     member _.Take (source: QuerySource<'T, 'Q>, count) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.Take (source.Source, count))
+
+    // member _.Take (source: QuerySource<'T, 'Q>, range: System.Range) : QuerySource<'T, 'Q> =
+    //     QuerySource (Enumerable.Take (source.Source, range))
 
     member _.TakeWhile (source: QuerySource<'T, 'Q>, predicate) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.TakeWhile (source.Source, Func<_, _>(predicate)))
@@ -1109,13 +1115,13 @@ module Query =
 
     let (|CallDistinct|_|) = (|SpecificCall1|_|) (methodhandleof (fun (query:QueryBuilder, keySelector) -> query.Distinct keySelector))
 
-    let (|CallTake|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Take(arg1, arg2)))
+    let (|CallTake|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, (arg2: int)) -> query.Take(arg1, arg2)))
 
     let (|CallTakeWhile|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.TakeWhile(arg1, arg2)))
 
     let (|CallContains|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Contains(arg1, arg2)))
 
-    let (|CallNth|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Nth(arg1, arg2)))
+    let (|CallNth|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, (arg2: int)) -> query.Nth(arg1, arg2)))
 
     let (|CallSkip|_|) = (|SpecificCall2|_|) (methodhandleof (fun (query:QueryBuilder, arg1, arg2) -> query.Skip(arg1, arg2)))
 

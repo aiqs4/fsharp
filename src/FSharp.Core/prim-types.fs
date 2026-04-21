@@ -442,6 +442,25 @@ namespace System.Diagnostics.CodeAnalysis
 
         member this.DynamicallyAccessedMembersAttribute(memberTypes: DynamicallyAccessedMemberTypes) =
             this.MemberTypes <- memberTypes
+#endif
+
+#if !NET7_0_OR_GREATER
+namespace System.Diagnostics.CodeAnalysis
+
+    open System
+    open Microsoft.FSharp.Core
+
+    /// <summary>
+    /// Indicates that the specified member requires the ability to generate new code at runtime.
+    /// </summary>
+    [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Constructor ||| AttributeTargets.Method,
+                     Inherited = false)>]
+    type internal RequiresDynamicCodeAttribute (message: string) =
+        inherit Attribute ()
+
+        member _.Message = message
+
+#endif
 
 namespace Microsoft.FSharp.Core
     open System
@@ -646,6 +665,7 @@ namespace Microsoft.FSharp.Core
             [<CompiledName("op_Amp")>]
             let __obsoleteAnd e1 e2 = if e1 then e2 else false
             let (&&) e1 e2 = if e1 then e2 else false
+
             [<CompiledName("Or")>]
             let __obsoleteOr e1 e2 = if e1 then true else e2
             let (||) e1 e2 = if e1 then true else e2
@@ -4095,6 +4115,7 @@ namespace Microsoft.FSharp.Core
 
     and 'T voption = ValueOption<'T>
 
+#if !NET8_0_OR_GREATER
 // These attributes only exist in .NET 8 and up.
 namespace System.Runtime.CompilerServices
     open System

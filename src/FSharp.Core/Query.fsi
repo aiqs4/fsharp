@@ -349,6 +349,13 @@ namespace Microsoft.FSharp.Linq
         [<CustomOperation("nth")>] 
         member Nth: source:QuerySource<'T,'Q> * index:int -> 'T
 
+        // /// <summary>A query operator that selects the element at a specified index amongst those selected so far (using System.Index for .NET 10+).
+        // /// </summary>
+        // /// 
+        // /// <example-tbd></example-tbd>
+        // [<CustomOperation("nth")>] 
+        // member Nth: source:QuerySource<'T,'Q> * index:System.Index -> 'T
+
         /// <summary>A query operator that bypasses a specified number of the elements selected so far and selects the remaining elements.
         /// </summary>
         /// 

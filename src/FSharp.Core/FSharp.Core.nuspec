@@ -4,23 +4,23 @@
         $CommonMetadataElements$
         <language>en-US</language>
         <dependencies>
-            <group targetFramework=".NETStandard2.0" />
-            <group targetFramework=".NETStandard2.1" />
+            <group targetFramework=".NET10.0" />
+            <group targetFramework="$FSharpCoreShippedNetTargetFramework$" />
         </dependencies>
     </metadata>
     <files>
         $CommonFileElements$
 
-        <file src="FSharp.Core\$Configuration$\netstandard2.0\FSharp.Core.dll" target="lib\netstandard2.0" />
-        <file src="FSharp.Core\$Configuration$\netstandard2.0\FSharp.Core.xml" target="lib\netstandard2.0" />
+        <file src="FSharp.Core\$Configuration$\net10.0\FSharp.Core.dll" target="lib\net10.0" />
+        <file src="FSharp.Core\$Configuration$\net10.0\FSharp.Core.xml" target="lib\net10.0" />
 
         <!-- resources -->
-        <file src="FSharp.Core\$Configuration$\netstandard2.0\**\FSharp.Core.resources.dll" target="lib\netstandard2.0" />
+        <file src="FSharp.Core\$Configuration$\net10.0\**\FSharp.Core.resources.dll" target="lib\net10.0" />
 
-        <file src="FSharp.Core\$Configuration$\netstandard2.1\FSharp.Core.dll" target="lib\netstandard2.1" />
-        <file src="FSharp.Core\$Configuration$\netstandard2.1\FSharp.Core.xml" target="lib\netstandard2.1" />
+        <file src="FSharp.Core\$Configuration$\$FSharpCoreShippedNetTargetFramework$\FSharp.Core.dll" target="lib\$FSharpCoreShippedNetTargetFramework$" />
+        <file src="FSharp.Core\$Configuration$\$FSharpCoreShippedNetTargetFramework$\FSharp.Core.xml" target="lib\$FSharpCoreShippedNetTargetFramework$" />
 
         <!-- resources -->
-        <file src="FSharp.Core\$Configuration$\netstandard2.1\**\FSharp.Core.resources.dll" target="lib\netstandard2.1" />
+        <file src="FSharp.Core\$Configuration$\$FSharpCoreShippedNetTargetFramework$\**\FSharp.Core.resources.dll" target="lib\$FSharpCoreShippedNetTargetFramework$" />
     </files>
 </package>
