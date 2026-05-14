@@ -1908,48 +1908,38 @@ let rec TryTranslateComputationExpression
 
         | SynExpr.IfThenElse(guardExpr, thenComp, elseCompOpt, spIfToThen, isRecovery, mIfToEndOfElseBranch, trivia) ->
             // IfExpr builder method (preferred when present):
-            //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Delay(fun () -> elseBody))
+            //   builder.IfExpr(guard, thenBody, elseBody)
             //   or for single-branch:
-            //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Zero())
+            //   builder.IfExpr(guard, thenBody, builder.Zero())
+            //   Branches are translated directly (no Delay wrapping) — RFC fix.
             //   The builder controls the guard type entirely; no bool constraint.
             if
                 ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.IfExpr
                 && hasBuilderMethod ceenv trivia.IfToThenRange "IfExpr"
             then
-                requireBuilderMethod "Delay" ceenv trivia.IfToThenRange trivia.IfToThenRange
-
                 match elseCompOpt with
                 | Some elseComp ->
                     if ceenv.isQuery then
                         error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
 
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
+
                     Some(
-                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun thenFill ->
-                            let thenDelayed =
-                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
-
-                            let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
-
-                            let elseDelayed =
-                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay elseComp.Range elseTranslated ] ceenv.builderValName
-
-                            translatedCtxt (
-                                mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; elseDelayed ] ceenv.builderValName
-                            ))
+                        translatedCtxt (
+                            mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenTranslated; elseTranslated ] ceenv.builderValName
+                        )
                     )
                 | None ->
                     requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
 
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
                     let zeroExpr = mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
 
                     Some(
-                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun thenFill ->
-                            let thenDelayed =
-                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
-
-                            translatedCtxt (
-                                mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; zeroExpr ] ceenv.builderValName
-                            ))
+                        translatedCtxt (
+                            mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenTranslated; zeroExpr ] ceenv.builderValName
+                        )
                     )
             else
                 // Existing path: standard if/then/else desugaring

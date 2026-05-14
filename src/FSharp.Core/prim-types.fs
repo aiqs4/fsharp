@@ -16,6 +16,7 @@ namespace Microsoft.FSharp.Core
 
     open System
     open System.Collections.Generic
+    open System.Diagnostics.CodeAnalysis
 
     type Unit() =
         override _.GetHashCode() = 0
@@ -7309,7 +7310,11 @@ namespace Microsoft.FSharp.Control
     open Microsoft.FSharp.Core.Operators
 
     module LazyExtensions = 
+#if NET7_0_OR_GREATER
         type Lazy<[<DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)>]'T> with
+#else
+        type Lazy<'T> with
+#endif
             [<CompiledName("Create")>] // give the extension member a 'nice', unmangled compiled name, unique within this module
             static member Create(creator : unit -> 'T) : Lazy<'T> =
                 let creator = Func<'T>(creator)
