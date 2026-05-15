@@ -1,0 +1,3634 @@
+commit 185b993b11209f605053fc28a949bc9561b0aa8a
+Author: Sascha Dewald <sascha.dewald@gmail.com>
+Date:   12 days ago
+
+    chore(ce-builder): Better CE Builder
+
+    Task 2: Allow if! and for! tokens - lexer, parser, LexFilter,
+    LanguageFeatures
+
+    - Add IF_BANG and FOR_BANG token rules in lex.fsl
+    - Add token declarations and grammar rules in pars.fsy
+    - if! desugars to MatchBang with bool pattern clauses at parser level
+    - for! desugars to ForEach with isFromSource=false (no Source wrapping)
+    - Add IfBang and ForBang language features (preview)
+    - Handle new tokens in LexFilter.fs and ServiceLexing.fs
+
+    Task 5: Desugar while! to recursive Bind/Combine/Zero (carrier-free)
+
+    Replace the old while! desugaring (which required While(unit->bool,...))
+    with
+    a recursive Bind/Combine/Zero pattern that only requires Bind, Combine,
+    and Zero.
+
+    while! guard do body now desugars to:
+      let rec __whileLoop () =
+          builder.Bind(guard, fun __res ->
+              if __res then
+                  builder.Combine(translatedBody, builder.Delay(fun () ->
+    __whileLoop()))
+              else
+                  builder.Zero())
+      __whileLoop()
+
+    Fix BindReturn poisoning do!, add tests and documentation
+
+    - When consumePat is a unit pattern (from do! desugaring), skip
+    BindReturn
+      optimization and fall back to Bind + Return. This prevents FS0001 when
+      a builder defines BindReturn(M, M->M) but do! produces unit->unit.
+    - Add CEEnhancementsTests.fs with 13 tests covering:
+      - BindReturn/do! poisoning fix
+      - if! desugaring with else, without else, version gating, missing Bind
+      - for! desugaring without IEnumerable constraint, version gating
+      - while! carrier-free desugaring
+      - Regression tests for async, task, seq
+    - Add docs/ce-enhancements/CHANGES.md and RFC-DRAFT.md
+
+    Improve BindReturn fix comment to clarify Bind overload selection
+
+    FS0041 fix: type-annotate unit continuation in CE Bind to disambiguate
+    overloads
+
+    When consumePat is a unit pattern (from do! desugaring), wrap the
+    continuation MatchLambda in SynExpr.Typed with (unit -> _) annotation.
+    This gives overload resolution enough type info to disambiguate between
+    Bind(M, unit -> M) and Bind(M, Expr -> M) without FS0041.
+
+    Add comprehensive tests for mixed let!/do!/and! with overloaded Bind
+    and BindReturn, including FS0041 regression tests.
+
+    WIP: WhileBang builder method + comprehensive tests (40/40 pass, 0
+    regressions)
+
+    feat(compiler): wrap while! guard in builder.Source and add design docs
+
+    Updated while! desugaring to pass the guard through builder.Source
+    before WhileBang, ensuring consistency with let! and match!.
+    Updated CheckComputationExpressions.fs to include the Source call.
+    Added "Design Principles" section to RFC-DRAFT.md outlining the minimal
+    extension approach for CE enhancements.
+    Updated CHANGES.md to reflect the technical desugaring change.
+
+    Add build, test, and release pipeline for
+    features/ce-enhancements-desugaring
+
+    * Add WhileExpr, ForExpr, IfExpr CE builder method dispatch with tests
+    and language feature flags
+    * Fix test failures: add NoEquality/NoComparison attributes and fix
+    integration test pattern matching
+    * Apply Fantomas formatting to CheckComputationExpressions.fs
+    * Add production-grade CI/CD pipeline for
+    features/ce-enhancements-desugaring branch
+    * Fix CE pipeline: scope to compiler+fsi only, add CE version stamp,
+    drop full test suite and Windows job
+    * Add CE version string to compiler banner and CE test job to pipeline
+    * Add fsharp-mod-tests harness and CE compatibility test workflow for
+    external libraries
+    * chore(test): add git test modules
+    * embed git for testing
+
+    chore(ce-builder): new xlf strings
+
+    chore(ce-buider): fix for ce-builder-tests
+diff --git a/docs/ce-enhancements/CHANGES.md b/docs/ce-enhancements/CHANGES.md
+new file mode 100644
+index 000000000..75407b579
+--- /dev/null
++++ b/docs/ce-enhancements/CHANGES.md
+@@ -0,0 +1,115 @@
++# CE Enhancements — Change Log
++
++## BindReturn poisons `do!` Fix
++
++**File:** `src/Compiler/Checking/Expressions/CheckComputationExpressions.fs`
++**Function:** `TranslateComputationExpressionBind`
++
++**Before:** When a builder defined `BindReturn`, the final `do!` in a CE block was desugared to
++`let! () = e in return ()` and then optimized to `BindReturn(e, fun () -> ())`. The `unit -> unit`
++continuation could not match `BindReturn(M, M -> M)`, causing FS0001.
++
++**After:** When `consumePat` is a unit pattern (from `do!` desugaring), the `BindReturn` optimization
++is skipped. The compiler falls back to `Bind(e, fun () -> Return(()))`, which correctly selects
++the unit-continuation `Bind` overload.
++
++---
++
++## `if!` Token and Desugaring
++
++**Files:**
++- `src/Compiler/lex.fsl` — Added `IF_BANG` token rule
++- `src/Compiler/pars.fsy` — Added `IF_BANG` grammar rules; desugars to `MatchBang` with `true`/`false` clauses
++- `src/Compiler/SyntaxTree/LexFilter.fs` — Handle `IF_BANG` in context management
++- `src/Compiler/Service/ServiceLexing.fs` / `.fsi` — Added `IfBang` token kind
++- `src/Compiler/Facilities/LanguageFeatures.fs` / `.fsi` — Added `LanguageFeature.IfBang` (preview)
++- `src/Compiler/FSComp.txt` — Added `featureIfBang` string
++
++**Desugaring:**
++```
++if! guard then thenBranch else elseBranch
++  → match! guard with true -> thenBranch | false -> elseBranch
++```
++Reuses existing `MatchBang` / `Bind + match` CE machinery. No new AST nodes.
++
++---
++
++## `for!` Token and Desugaring
++
++**Files:** Same set as `if!` above.
++
++**Desugaring:**
++```
++for! pat in collection do body
++  → builder.For(collection, fun pat -> body)
++```
++Uses `ForEach` with `isFromSource=false` to skip `Source()` wrapping, removing the `IEnumerable` constraint.
++
++---
++
++## `while!` Carrier-Free Desugaring
++
++**File:** `src/Compiler/Checking/Expressions/CheckComputationExpressions.fs`
++**Function:** `TryTranslateComputationExpression`, `SynExpr.WhileBang` case
++
++**Before:** Desugared to `let! first = guard; let mutable cond = first; while cond do body; let! first = guard; cond <- first`.
++Required `While(unit -> bool, M<unit>)` on the builder.
++
++**After:** Desugars to recursive `Bind/Combine/Zero`:
++```
++while! guard do body
++  →
++let rec __whileLoop () =
++    builder.Bind(guard, fun __res ->
++        if __res then
++            builder.Combine(translatedBody, builder.Delay(fun () -> __whileLoop()))
++        else
++            builder.Zero())
++__whileLoop()
++```
++Only requires `Bind`, `Combine`, and `Zero`. `While` is no longer required for `while!`.
++Regular `while` (non-bang) is unchanged.
++
++---
++
++## `WhileBang` Optional Builder Method
++
++**File:** `src/Compiler/Checking/Expressions/CheckComputationExpressions.fs`
++**Function:** `TryTranslateComputationExpression`, `SynExpr.WhileBang` case
++
++**Problem:** The Bind/if/Combine/Zero desugaring above hardcodes `if __res then ... else ...`,
++forcing the `Bind` continuation parameter to be `bool`. This prevents DSL-style builders
++(e.g., WASM code generators) from using `while!` with non-bool guard types. Builders had
++to resort to hacks like `Bind(g: Expr, k: bool -> Expr)` with a side-effecting `Stack<Expr>`
++to tunnel the guard through the bool bottleneck.
++
++**Fix:** If the builder defines a `WhileBang` method, `while!` desugars to:
++```
++while! guard do body
++  → builder.WhileBang(builder.Source(guard), builder.Delay(fun () -> body))
++```
++The guard is Source-wrapped (consistent with `let!`/`match!`), then passed directly to
++the builder — no `Bind`, no bool coercion. The `WhileBang` method's signature determines
++the guard type entirely.
++
++If the builder has no `WhileBang` method, the compiler falls back to the existing
++Bind/if/Combine/Zero pattern (fully backward compatible).
++
++**Example — WASM builder (before):**
++```fsharp
++// HACK: stack to tunnel guard through bool bottleneck
++let _guards = Stack<Expr>()
++member _.Bind(g: Expr, k: bool -> Expr) = _guards.Push(g); k true
++member _.While(_: unit -> bool, body) =
++    if _guards.Count > 0 then
++        let g = _guards.Pop()
++        Block(exit, Loop(lbl, If(g, Seq [body; Continue lbl], Break exit)))
++    else body
++```
++
++**Example — WASM builder (after):**
++```fsharp
++// Clean: compiler calls WhileBang directly, no stack hack needed
++member _.WhileBang(guard: Expr, body: Expr) =
++    Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
++```
+diff --git a/docs/ce-enhancements/RFC-DRAFT.md b/docs/ce-enhancements/RFC-DRAFT.md
+new file mode 100644
+index 000000000..a191eadd4
+--- /dev/null
++++ b/docs/ce-enhancements/RFC-DRAFT.md
+@@ -0,0 +1,191 @@
++# RFC FS-CENH — Computation Expression Enhancements
++
++- [x] Implementation complete
++- [x] 40 tests passing (compile + runtime verified)
++- [x] 87 existing CE tests + 4 WhileBang tests — no regressions
++- [ ] Reviewed by F# team
++
++## Summary
++
++This RFC proposes five enhancements to F# Computation Expressions (CEs) that improve expressiveness for DSL-style builders (e.g., WASM code generators, AST builders) while maintaining full backward compatibility with existing async/task/seq CEs.
++
++## Motivation
++
++F# CEs are a powerful metaprogramming facility, but several limitations prevent their use as general-purpose DSL builders:
++
++1. **`if!` and `for!` are reserved but unusable** — The compiler reserves these tokens (FS1141) but provides no desugaring, forcing workarounds like `match! guard with true -> ... | false -> ...` instead of `if! guard then ... else ...`.
++
++2. **`while!` hardcodes `bool`** — The current `while!` desugaring generates `if __res then ... else ...`, forcing the Bind continuation to produce `bool`. DSL builders that want non-bool guard types (e.g., WASM Expr) must use fragile hacks (side-effecting `Stack<Expr>` to tunnel values through the bool bottleneck).
++
++3. **`BindReturn` poisons `do!`** — When a builder defines `BindReturn(M<'T>, 'T -> M<'U>)`, the final `do!` is incorrectly optimized to `BindReturn(e, fun () -> ())`, causing FS0001 type errors.
++
++4. **`for` inside CEs forces `IEnumerable` via `Source()`** — When a builder defines `Source()`, regular `for` wraps the collection through it, requiring `IEnumerable`. Builders working with custom collection types can't use `for` without also defining `Source`.
++
++## Design Principles
++
++Each enhancement follows the principle of **minimal extension**: reuse existing infrastructure where possible, add new builder methods only when the existing desugaring imposes an unavoidable type constraint.
++
++| Construct | Approach | Rationale |
++|-----------|----------|-----------|
++| `if!` | Parser rewrite → `match!` | `match!` already handles `Bind` + pattern matching. `if! g then a else b` is exactly `match! g with true → a \| false → b`. No new builder method needed. |
++| `for!` | Parser rewrite → `for` without `Source` | `For` already handles iteration. The `!` just skips `Source()` wrapping, removing the `IEnumerable` constraint. No new builder method needed. |
++| `while!` | New `WhileBang` builder method (optional) | The existing desugaring necessarily constrains the guard to `bool` (via `if __res then`). This is the **only** construct where the standard desugaring imposes a type constraint the builder cannot control. `WhileBang` is the escape hatch. |
++| `do!`/`BindReturn` | Skip optimization for unit pattern | `BindReturn(e, fun () → ())` has `unit → unit` continuation that fails `BindReturn(M, M → M)` matching. Falling back to `Bind + Return` correctly selects the unit overload. |
++| `do!`/FS0041 | Type-annotate continuation | `(unit → _)` annotation gives the constraint solver enough information to disambiguate `Bind(M, unit → M)` vs `Bind(M, Expr → M)` without over-constraining. |
++
++The key insight is that `yield!`, `return!`, `use!`, and `match!` already have clean builder method dispatch (`YieldFrom`, `ReturnFrom`, `Bind`, etc.) and require no changes. Only `while!` genuinely needs a new builder method because its fallback hardcodes `bool`.
++
++## Detailed Design
++
++### 1. `if!` — Conditional Bind
++
++**Syntax:**
++```fsharp
++builder {
++    if! asyncCondition then
++        doSomething()
++    else
++        doOther()
++}
++```
++
++**Desugaring:** Reuses existing `match!` infrastructure:
++```fsharp
++match! asyncCondition with
++| true -> doSomething()
++| false -> doOther()
++```
++
++No new AST nodes. The parser transforms `if!` into `SynExpr.MatchBang` with `true`/`false` pattern clauses.
++
++**Required builder methods:** Same as `match!` — `Bind`.
++
++**Language feature gate:** `LanguageFeature.IfBang` (preview).
++
++### 2. `for!` — Source-Free Iteration
++
++**Syntax:**
++```fsharp
++builder {
++    for! item in customCollection do
++        processItem item
++}
++```
++
++**Desugaring:** Same as `for`, but with `isFromSource = false` to skip `Source()` wrapping:
++```fsharp
++builder.For(customCollection, fun item -> processItem item)
++```
++
++This allows builders to define `For` with arbitrary collection types without requiring `IEnumerable`.
++
++**Required builder methods:** `For`.
++
++**Language feature gate:** `LanguageFeature.ForBang` (preview).
++
++### 3. `while!` — Carrier-Free Loop with Optional `WhileBang`
++
++#### 3a. Carrier-Free Desugaring (existing improvement)
++
++**Before (upstream):** `while!` required `While(unit -> bool, M<unit>)` on the builder, limiting it to bool-typed guards.
++
++**After:** Desugars to recursive `Bind/Combine/Zero`:
++```fsharp
++while! guard do body
++  →
++let rec __whileLoop () =
++    builder.Bind(guard, fun __res ->
++        if __res then
++            builder.Combine(translatedBody, builder.Delay(fun () -> __whileLoop()))
++        else
++            builder.Zero())
++__whileLoop()
++```
++
++Only requires `Bind`, `Combine`, `Zero`. Works for async/task CEs where guard is `Async<bool>`.
++
++#### 3b. `WhileBang` Builder Method (new)
++
++**Problem:** The `if __res then` in 3a hardcodes `bool`. DSL builders where `Bind` extracts non-bool types cannot use `while!`.
++
++**Solution:** If the builder defines a `WhileBang` method, the compiler uses it directly:
++```fsharp
++while! guard do body
++  → builder.WhileBang(builder.Source(guard), builder.Delay(fun () -> body))
++```
++
++The guard is Source-wrapped (consistent with `let!`/`match!`), then passed directly to the builder — no `Bind`, no bool coercion. The builder's `WhileBang` signature determines the guard type.
++
++**Fallback:** If no `WhileBang` method exists, the compiler uses the Bind/if pattern from 3a. Fully backward compatible.
++
++**Example — WASM code generator:**
++```fsharp
++type WasmBuilder() =
++    // Guard is Expr, not bool. No stack hack needed.
++    member _.WhileBang(guard: Expr, body: Expr) =
++        Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
++    member _.Delay(f: unit -> Expr) = f()
++    // ... other members
++
++let wasm = WasmBuilder()
++let result = wasm {
++    while! (LG "cond") do    // guard is Expr, not Async<bool>
++        do! Assign("x", C 1)
++}
++// result: Block(exit, Loop(lbl, If(LG "cond", Seq [...], Break exit)))
++```
++
++### 4. `BindReturn`/`do!` Fix
++
++**Problem:** When a builder defines `BindReturn(M<'T>, 'T -> M<'U>)`, the compiler optimizes `let! x = e in return x` to `BindReturn(e, fun x -> x)`. But `do!` desugars to `let! () = e in return ()`, which becomes `BindReturn(e, fun () -> ())`. The `unit -> unit` continuation doesn't match `'T -> M<'U>`, causing FS0001.
++
++**Fix:** When the `consumePat` is a unit pattern (from `do!` desugaring), the `BindReturn` optimization is skipped. The compiler falls back to `Bind(e, fun () -> Return(()))`, which correctly selects the unit-continuation `Bind` overload.
++
++### 5. FS0041 Overload Resolution Fix
++
++When a builder has both `Bind(M<'T>, 'T -> M<'R>)` and `Bind(M<'T>, unit -> M<'R>)`, `do!` now correctly selects the unit-continuation overload without ambiguity. The fix annotates the synthetic continuation `fun () -> ...` with explicit `unit` type, giving the constraint solver enough information to resolve the overload.
++
++## Backward Compatibility
++
++All changes are fully backward compatible:
++
++| Change | Impact on existing code |
++|--------|------------------------|
++| `if!` | Previously a parse error (FS1141). No existing code uses it. |
++| `for!` | Previously a parse error (FS1141). No existing code uses it. |
++| `while!` carrier-free | Existing builders with `While` still work. New desugaring only requires `Bind`/`Combine`/`Zero`. |
++| `WhileBang` method | Optional. Builders without it use existing Bind/if fallback. |
++| `BindReturn`/`do!` fix | Only affects builders with both `BindReturn` and overloaded `Bind`. Previously caused FS0001. |
++| FS0041 fix | Only affects builders with overloaded `Bind`. Previously caused FS0041. |
++
++## Test Matrix
++
++| Test Category | Count | Method |
++|---------------|-------|--------|
++| BindReturn poisoning | 2 | compile |
++| `if!` | 4 | compile |
++| `for!` | 2 | compile |
++| `while!` | 2 | compile |
++| Regression (async/task/seq) | 3 | compile |
++| Full AST builder | 2 | compile |
++| FS0041 overload | 2 | compile |
++| Non-bang while/for | 3 | compile |
++| Bang/non-bang coexistence | 2 | compile |
++| Runtime — while! iterations | 1 | compileExeAndRun |
++| Runtime — do! overload | 1 | compileExeAndRun |
++| Runtime — and! Bind2Return | 1 | compileExeAndRun |
++| Runtime — for without bang | 1 | compileExeAndRun |
++| Runtime — while Expr guard | 1 | compileExeAndRun |
++| try/with, try/finally, use!, return! | 4 | compile |
++| While guard type freedom | 2 | compile + run |
++| Stress tests | 3 | compile |
++| WASM CE reference demo (10 subtests) | 2 | compileExeAndRun |
++| WhileBang builder method | 2 | compileExeAndRun |
++| WhileBang fallback | 1 | compileExeAndRun |
++| **Total** | **40** | |
++
++## Implementation
++
++All changes are in `src/Compiler/Checking/Expressions/CheckComputationExpressions.fs` (CE desugaring), `src/Compiler/pars.fsy` (parser), `src/Compiler/lex.fsl` (lexer), and supporting infrastructure files.
++
++See [CHANGES.md](CHANGES.md) for detailed implementation notes.
++Subproject commit addb6a102e7b64bb4f4edae708392832c590dc4a
+diff --git a/src/Compiler/Checking/Expressions/CheckComputationExpressions.fs b/src/Compiler/Checking/Expressions/CheckComputationExpressions.fs
+index 0899ff2d0..807f52b6e 100644
+--- a/src/Compiler/Checking/Expressions/CheckComputationExpressions.fs
++++ b/src/Compiler/Checking/Expressions/CheckComputationExpressions.fs
+@@ -1289,9 +1289,6 @@ let rec TryTranslateComputationExpression
+                 | Some e -> e
+                 | None -> sourceExpr
+
+-            let wrappedSourceExpr =
+-                mkSourceExprConditional isFromSource sourceExpr ceenv.sourceMethInfo ceenv.builderValName
+-
+             let mFor =
+                 match spFor with
+                 | DebugPointAtFor.Yes m -> m.NoteSourceConstruct(NotedSourceConstruct.For)
+@@ -1309,46 +1306,122 @@ let rec TryTranslateComputationExpression
+
+             let mPat = pat.Range
+
+-            requireBuilderMethod "For" ceenv mFor mFor
+-
+-            // Add the variables to the query variable space, on demand
+-            let varSpace =
+-                addVarsToVarSpace varSpace (fun _mCustomOp env ->
+-                    use _holder = TemporarilySuspendReportingTypecheckResultsToSink cenv.tcSink
++            // ForExpr builder method (preferred when present):
++            //   builder.ForExpr(collection, fun pat -> body)
++            //   Skips Source() wrapping; the builder controls the collection type entirely.
++            if
++                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.ForExpr
++                && hasBuilderMethod ceenv mFor "ForExpr"
++            then
++                // Add the variables to the query variable space, on demand
++                let varSpace =
++                    addVarsToVarSpace varSpace (fun _mCustomOp env ->
++                        use _holder = TemporarilySuspendReportingTypecheckResultsToSink cenv.tcSink
+
+-                    let _, _, vspecs, envinner, _ =
+-                        TcMatchPattern cenv (NewInferenceType cenv.g) env ceenv.tpenv pat None TcTrueMatchClause.No
++                        let _, _, vspecs, envinner, _ =
++                            TcMatchPattern cenv (NewInferenceType cenv.g) env ceenv.tpenv pat None TcTrueMatchClause.No
+
+-                    vspecs, envinner)
++                        vspecs, envinner)
+
+-            Some(
+-                TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun innerCompR ->
++                Some(
++                    TranslateComputationExpression
++                        (noTailCall ceenv)
++                        CompExprTranslationPass.Initial
++                        q
++                        varSpace
++                        innerComp
++                        (fun innerCompR ->
+
+-                    let forCall =
+-                        mkSynCall
+-                            "For"
+-                            mFor
+-                            [
+-                                wrappedSourceExpr
+-                                SynExpr.MatchLambda(
+-                                    false,
+-                                    mPat,
++                            let forCall =
++                                mkSynCall
++                                    "ForExpr"
++                                    mFor
+                                     [
+-                                        SynMatchClause(pat, None, innerCompR, mPat, DebugPointAtTarget.Yes, SynMatchClauseTrivia.Zero)
+-                                    ],
+-                                    DebugPointAtBinding.NoneAtInvisible,
++                                        sourceExpr
++                                        SynExpr.MatchLambda(
++                                            false,
++                                            mPat,
++                                            [
++                                                SynMatchClause(
++                                                    pat,
++                                                    None,
++                                                    innerCompR,
++                                                    mPat,
++                                                    DebugPointAtTarget.Yes,
++                                                    SynMatchClauseTrivia.Zero
++                                                )
++                                            ],
++                                            DebugPointAtBinding.NoneAtInvisible,
++                                            mFor
++                                        )
++                                    ]
++                                    ceenv.builderValName
++
++                            let forCall =
++                                match spFor with
++                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
++                                | DebugPointAtFor.No -> forCall
++
++                            translatedCtxt forCall)
++                )
++            else
++                // Existing path: builder.For(Source(collection), fun pat -> body)
++                let wrappedSourceExpr =
++                    mkSourceExprConditional isFromSource sourceExpr ceenv.sourceMethInfo ceenv.builderValName
++
++                requireBuilderMethod "For" ceenv mFor mFor
++
++                // Add the variables to the query variable space, on demand
++                let varSpace =
++                    addVarsToVarSpace varSpace (fun _mCustomOp env ->
++                        use _holder = TemporarilySuspendReportingTypecheckResultsToSink cenv.tcSink
++
++                        let _, _, vspecs, envinner, _ =
++                            TcMatchPattern cenv (NewInferenceType cenv.g) env ceenv.tpenv pat None TcTrueMatchClause.No
++
++                        vspecs, envinner)
++
++                Some(
++                    TranslateComputationExpression
++                        (noTailCall ceenv)
++                        CompExprTranslationPass.Initial
++                        q
++                        varSpace
++                        innerComp
++                        (fun innerCompR ->
++
++                            let forCall =
++                                mkSynCall
++                                    "For"
+                                     mFor
+-                                )
+-                            ]
+-                            ceenv.builderValName
++                                    [
++                                        wrappedSourceExpr
++                                        SynExpr.MatchLambda(
++                                            false,
++                                            mPat,
++                                            [
++                                                SynMatchClause(
++                                                    pat,
++                                                    None,
++                                                    innerCompR,
++                                                    mPat,
++                                                    DebugPointAtTarget.Yes,
++                                                    SynMatchClauseTrivia.Zero
++                                                )
++                                            ],
++                                            DebugPointAtBinding.NoneAtInvisible,
++                                            mFor
++                                        )
++                                    ]
++                                    ceenv.builderValName
+
+-                    let forCall =
+-                        match spFor with
+-                        | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
+-                        | DebugPointAtFor.No -> forCall
++                            let forCall =
++                                match spFor with
++                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
++                                | DebugPointAtFor.No -> forCall
+
+-                    translatedCtxt forCall)
+-            )
++                            translatedCtxt forCall)
++                )
+
+         | SynExpr.For(
+             forDebugPoint = spFor
+@@ -1382,28 +1455,52 @@ let rec TryTranslateComputationExpression
+             if ceenv.isQuery then
+                 error (Error(FSComp.SR.tcNoWhileInQuery (), mWhile))
+
+-            requireBuilderMethod "While" ceenv mWhile mWhile
+-            requireBuilderMethod "Delay" ceenv mWhile mWhile
+-
+             // 'while' is hit just before each time the guard is called
+             let guardExpr =
+                 match spWhile with
+                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mWhile, false, guardExpr)
+                 | DebugPointAtWhile.No -> guardExpr
+
+-            Some(
+-                TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
+-                    translatedCtxt (
+-                        mkSynCall
+-                            "While"
+-                            mWhile
+-                            [
+-                                mkSynDelay2 guardExpr
+-                                mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
+-                            ]
+-                            ceenv.builderValName
+-                    ))
+-            )
++            // WhileExpr builder method (preferred when present):
++            //   builder.WhileExpr(guard, builder.Delay(fun () -> body))
++            //   The builder controls the guard type entirely; no bool constraint.
++            if
++                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.WhileExpr
++                && hasBuilderMethod ceenv mWhile "WhileExpr"
++            then
++                requireBuilderMethod "Delay" ceenv mWhile mWhile
++
++                Some(
++                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
++                        translatedCtxt (
++                            mkSynCall
++                                "WhileExpr"
++                                mWhile
++                                [
++                                    guardExpr
++                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
++                                ]
++                                ceenv.builderValName
++                        ))
++                )
++            else
++                // Existing path: builder.While(fun () -> guard, builder.Delay(fun () -> body))
++                requireBuilderMethod "While" ceenv mWhile mWhile
++                requireBuilderMethod "Delay" ceenv mWhile mWhile
++
++                Some(
++                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
++                        translatedCtxt (
++                            mkSynCall
++                                "While"
++                                mWhile
++                                [
++                                    mkSynDelay2 guardExpr
++                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
++                                ]
++                                ceenv.builderValName
++                        ))
++                )
+
+         | SynExpr.WhileBang(spWhile, guardExpr, innerComp, mOrig) ->
+             let mGuard = guardExpr.Range
+@@ -1415,99 +1512,115 @@ let rec TryTranslateComputationExpression
+
+             let mGuard = mGuard.MakeSynthetic()
+
++            if ceenv.isQuery then
++                error (Error(FSComp.SR.tcNoWhileInQuery (), mWhile))
++
+             // 'while!' is hit just before each time the guard is called
+             let guardExpr =
+                 match spWhile with
+                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mWhile, false, guardExpr)
+                 | DebugPointAtWhile.No -> guardExpr
+
+-            let rewrittenWhileExpr =
+-                let idFirst = mkSynId mGuard (CompilerGeneratedName "first")
+-                let patFirst = mkSynPatVar None idFirst
+-
+-                let body =
+-                    let idCond = mkSynId mGuard (CompilerGeneratedName "cond")
+-                    let patCond = mkSynPatVar None idCond
+-
+-                    let condBinding =
+-                        mkSynBinding
+-                            (PreXmlDoc.Empty, patCond)
+-                            (None,
+-                             false,
+-                             true,
+-                             mGuard,
+-                             DebugPointAtBinding.NoneAtSticky,
+-                             None,
+-                             SynExpr.Ident idFirst,
+-                             mGuard,
+-                             [],
+-                             [],
+-                             None,
+-                             SynBindingTrivia.Zero)
+-
+-                    let setCondExpr = SynExpr.Set(SynExpr.Ident idCond, SynExpr.Ident idFirst, mGuard)
++            // while! desugaring follows the builder method dispatch principle:
++            //
++            // Path 1 — WhileBang builder method (preferred):
++            //   builder.WhileBang(builder.Source(guard), builder.Delay(fun () -> body))
++            //   The builder controls the guard type entirely; no bool constraint.
++            //   Analogous to how TryFinally/TryWith receive pre-translated bodies.
++            //
++            // Path 2 — Bind/Combine/Zero fallback (backward compatible):
++            //   let rec loop () =
++            //       builder.Bind(builder.Source(guard), fun res ->
++            //           if res then builder.Combine(body, builder.Delay(loop))
++            //           else builder.Zero())
++            //   loop ()
++            //   This requires the guard to produce bool (due to the if/else dispatch).
++            if hasBuilderMethod ceenv mWhile "WhileBang" then
++                requireBuilderMethod "Delay" ceenv mWhile mWhile
++
++                let sourceExpr = mkSourceExpr guardExpr ceenv.sourceMethInfo ceenv.builderValName
+
+-                    let binding =
+-                        SynBinding(
+-                            accessibility = None,
+-                            kind = SynBindingKind.Normal,
+-                            isInline = false,
+-                            isMutable = false,
+-                            attributes = [],
+-                            xmlDoc = PreXmlDoc.Empty,
+-                            valData = SynInfo.emptySynValData,
+-                            headPat = patFirst,
+-                            returnInfo = None,
+-                            expr = guardExpr,
+-                            range = guardExpr.Range,
+-                            debugPoint = DebugPointAtBinding.NoneAtSticky,
+-                            trivia =
+-                                { SynBindingTrivia.Zero with
+-                                    LeadingKeyword = SynLeadingKeyword.LetBang mGuard
+-                                }
+-                        )
++                Some(
++                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
++                        translatedCtxt (
++                            mkSynCall
++                                "WhileBang"
++                                mWhile
++                                [
++                                    sourceExpr
++                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
++                                ]
++                                ceenv.builderValName
++                        ))
++                )
++            else
++                requireBuilderMethod "Bind" ceenv mWhile mWhile
++                requireBuilderMethod "Combine" ceenv mWhile mWhile
++                requireBuilderMethod "Zero" ceenv mWhile mWhile
++
++                let translatedBody = TranslateComputationExpressionNoQueryOps ceenv innerComp
++                let inputExpr = mkSourceExpr guardExpr ceenv.sourceMethInfo ceenv.builderValName
++                let idLoop = mkSynId mGuard (CompilerGeneratedName "whileLoop")
++                let idRes = mkSynId mGuard (CompilerGeneratedName "res")
++
++                // __whileLoop ()
++                let loopCall =
++                    mkSynApp1 (SynExpr.Ident idLoop) (SynExpr.Const(SynConst.Unit, mGuard)) mGuard
++
++                // builder.Delay(fun () -> __whileLoop ()) or just __whileLoop ()
++                let delayedLoopCall =
++                    match tryFindBuilderMethod ceenv mWhile "Delay" with
++                    | [] -> loopCall
++                    | _ -> mkSynCall "Delay" mWhile [ mkSynDelay mGuard loopCall ] ceenv.builderValName
++
++                // builder.Combine(translatedBody, delayedLoopCall)
++                let combineExpr =
++                    mkSynCall "Combine" mWhile [ translatedBody; delayedLoopCall ] ceenv.builderValName
++
++                // builder.Zero()
++                let zeroExpr = mkSynCall "Zero" mWhile [] ceenv.builderValName
++
++                // if __res then combineExpr else zeroExpr
++                let ifExpr =
++                    let trivia =
++                        {
++                            IfKeyword = mGuard
++                            IsElif = false
++                            ThenKeyword = mGuard
++                            ElseKeyword = Some mGuard
++                            IfToThenRange = mGuard
++                        }
+
+-                    let bindCondExpr =
+-                        SynExpr.LetOrUse
+-                            {
+-                                IsRecursive = false
+-                                // isUse = false,
+-                                IsFromSource = true // compiler generated during desugaring
+-                                // isBang = true,
+-                                Bindings = [ binding ]
+-                                Body = setCondExpr
+-                                Range = mGuard
+-                                Trivia = SynLetOrUseTrivia.Zero
+-                            }
++                    SynExpr.IfThenElse(
++                        SynExpr.Ident idRes,
++                        combineExpr,
++                        Some zeroExpr,
++                        DebugPointAtBinding.NoneAtSticky,
++                        false,
++                        mOrig,
++                        trivia
++                    )
+
+-                    let whileExpr =
+-                        SynExpr.While(
+-                            DebugPointAtWhile.No,
+-                            SynExpr.Ident idCond,
+-                            SynExpr.Sequential(
+-                                DebugPointAtSequential.SuppressBoth,
+-                                true,
+-                                innerComp,
+-                                bindCondExpr,
+-                                mWhile,
+-                                SynExprSequentialTrivia.Zero
+-                            ),
+-                            mOrig
+-                        )
++                // fun __res -> ifExpr
++                let consumeExpr =
++                    mkSynLambda
++                        (SynSimplePats.SimplePats([ SynSimplePat.Id(idRes, None, false, false, false, mGuard) ], [], mGuard))
++                        ifExpr
++                        mOrig
+
+-                    SynExpr.LetOrUse
+-                        {
+-                            IsRecursive = false
+-                            // isUse = false,
+-                            IsFromSource = false // compiler generated during desugaring
+-                            // isBang = false,
+-                            Bindings = [ condBinding ]
+-                            Body = whileExpr
+-                            Range = mGuard
+-                            Trivia = SynLetOrUseTrivia.Zero
+-                        }
++                // builder.Bind(guard, consumeExpr)
++                let spBind =
++                    match spWhile with
++                    | DebugPointAtWhile.Yes m -> DebugPointAtBinding.Yes m
++                    | DebugPointAtWhile.No -> DebugPointAtBinding.NoneAtSticky
+
+-                let binding =
++                let bindExpr =
++                    mkSynCall "Bind" mWhile [ inputExpr; consumeExpr ] ceenv.builderValName
++                    |> addBindDebugPoint spBind
++
++                let loopBody = mkSynDelay mGuard bindExpr
++
++                let loopBinding =
+                     SynBinding(
+                         accessibility = None,
+                         kind = SynBindingKind.Normal,
+@@ -1516,30 +1629,26 @@ let rec TryTranslateComputationExpression
+                         attributes = [],
+                         xmlDoc = PreXmlDoc.Empty,
+                         valData = SynInfo.emptySynValData,
+-                        headPat = patFirst,
++                        headPat = mkSynPatVar None idLoop,
+                         returnInfo = None,
+-                        expr = guardExpr,
+-                        range = guardExpr.Range,
++                        expr = loopBody,
++                        range = mGuard,
+                         debugPoint = DebugPointAtBinding.NoneAtSticky,
+-                        trivia =
+-                            { SynBindingTrivia.Zero with
+-                                LeadingKeyword = SynLeadingKeyword.LetBang mGuard
+-                            }
++                        trivia = SynBindingTrivia.Zero
+                     )
+
+-                SynExpr.LetOrUse
+-                    {
+-                        IsRecursive = false
+-                        // isUse = false,
+-                        IsFromSource = true // compiler generated during desugaring
+-                        // isBang = true,
+-                        Bindings = [ binding ]
+-                        Body = body
+-                        Range = mGuard
+-                        Trivia = SynLetOrUseTrivia.Zero
+-                    }
++                let whileExpr =
++                    SynExpr.LetOrUse
++                        {
++                            IsRecursive = true
++                            IsFromSource = false
++                            Bindings = [ loopBinding ]
++                            Body = loopCall
++                            Range = mOrig
++                            Trivia = SynLetOrUseTrivia.Zero
++                        }
+
+-            TryTranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace rewrittenWhileExpr translatedCtxt
++                Some(translatedCtxt whileExpr)
+
+         | SynExpr.TryFinally(innerComp, unwindExpr, _mTryToLast, spTry, spFinally, trivia) ->
+
+@@ -1797,36 +1906,90 @@ let rec TryTranslateComputationExpression
+                         )
+
+         | SynExpr.IfThenElse(guardExpr, thenComp, elseCompOpt, spIfToThen, isRecovery, mIfToEndOfElseBranch, trivia) ->
+-            match elseCompOpt with
+-            | Some elseComp ->
+-                if ceenv.isQuery then
+-                    error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
++            // IfExpr builder method (preferred when present):
++            //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Delay(fun () -> elseBody))
++            //   or for single-branch:
++            //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Zero())
++            //   The builder controls the guard type entirely; no bool constraint.
++            if
++                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.IfExpr
++                && hasBuilderMethod ceenv trivia.IfToThenRange "IfExpr"
++            then
++                requireBuilderMethod "Delay" ceenv trivia.IfToThenRange trivia.IfToThenRange
+
+-                Some(
+-                    translatedCtxt (
+-                        SynExpr.IfThenElse(
+-                            guardExpr,
+-                            TranslateComputationExpressionNoQueryOps ceenv thenComp,
+-                            Some(TranslateComputationExpressionNoQueryOps ceenv elseComp),
+-                            spIfToThen,
+-                            isRecovery,
+-                            mIfToEndOfElseBranch,
+-                            trivia
+-                        )
++                match elseCompOpt with
++                | Some elseComp ->
++                    if ceenv.isQuery then
++                        error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
++
++                    Some(
++                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun thenFill ->
++                            let thenDelayed =
++                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
++
++                            let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
++
++                            let elseDelayed =
++                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay elseComp.Range elseTranslated ] ceenv.builderValName
++
++                            translatedCtxt (
++                                mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; elseDelayed ] ceenv.builderValName
++                            ))
+                     )
+-                )
+-            | None ->
+-                let elseComp =
++                | None ->
+                     requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
+
+-                    mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
++                    let zeroExpr = mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
+
+-                Some(
+-                    TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun holeFill ->
++                    Some(
++                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun thenFill ->
++                            let thenDelayed =
++                                mkSynCall "Delay" trivia.IfToThenRange [ mkSynDelay thenComp.Range thenFill ] ceenv.builderValName
++
++                            translatedCtxt (
++                                mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; zeroExpr ] ceenv.builderValName
++                            ))
++                    )
++            else
++                // Existing path: standard if/then/else desugaring
++                match elseCompOpt with
++                | Some elseComp ->
++                    if ceenv.isQuery then
++                        error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
++
++                    Some(
+                         translatedCtxt (
+-                            SynExpr.IfThenElse(guardExpr, holeFill, Some elseComp, spIfToThen, isRecovery, mIfToEndOfElseBranch, trivia)
+-                        ))
+-                )
++                            SynExpr.IfThenElse(
++                                guardExpr,
++                                TranslateComputationExpressionNoQueryOps ceenv thenComp,
++                                Some(TranslateComputationExpressionNoQueryOps ceenv elseComp),
++                                spIfToThen,
++                                isRecovery,
++                                mIfToEndOfElseBranch,
++                                trivia
++                            )
++                        )
++                    )
++                | None ->
++                    let elseComp =
++                        requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
++
++                        mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
++
++                    Some(
++                        TranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace thenComp (fun holeFill ->
++                            translatedCtxt (
++                                SynExpr.IfThenElse(
++                                    guardExpr,
++                                    holeFill,
++                                    Some elseComp,
++                                    spIfToThen,
++                                    isRecovery,
++                                    mIfToEndOfElseBranch,
++                                    trivia
++                                )
++                            ))
++                    )
+
+         // 'let binds in expr'
+         | LetOrUse({
+@@ -2644,8 +2807,22 @@ and TranslateComputationExpressionBind
+
+     let innerRange = innerComp.Range
+
++    // Detect if consumePat is a unit pattern — this means the binding came from a do! desugaring.
++    // When the continuation is unit->unit (from do! producing `let! () = e in return ()`),
++    // BindReturn would create BindReturn(e, fun () -> ()) which has type unit->unit.
++    // If the builder's BindReturn expects a non-unit continuation (e.g. Expr -> Expr),
++    // this causes FS0001. Fall back to Bind + Return in this case, which correctly
++    // selects the unit-continuation Bind overload (e.g. Bind(M, unit -> M)).
++    let isUnitPatBinding =
++        match consumePat with
++        | SynPat.Const(SynConst.Unit, _) -> true
++        | _ -> false
++
+     let innerCompReturn =
+-        if ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.AndBang then
++        if
++            ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.AndBang
++            && not isUnitPatBinding
++        then
+             convertSimpleReturnToExpr ceenv comp varSpace innerComp
+         else
+             None
+@@ -2692,6 +2869,23 @@ and TranslateComputationExpressionBind
+                     innerRange
+                 )
+
++            // When consumePat is a unit pattern (from do! desugaring), wrap the continuation lambda
++            // in a type annotation (unit -> _) so overload resolution can disambiguate between
++            // Bind(M, unit -> M) and Bind(M, Expr -> M) without hitting FS0041.
++            let consumeExpr =
++                if isUnitPatBinding then
++                    let unitTy =
++                        SynType.LongIdent(SynLongIdent([ mkSynId consumePat.Range "unit" ], [], [ None ]))
++
++                    let varTy = SynType.Anon(consumePat.Range)
++
++                    let funTy =
++                        SynType.Fun(unitTy, varTy, consumePat.Range, { ArrowRange = consumePat.Range })
++
++                    SynExpr.Typed(consumeExpr, funTy, consumeExpr.Range)
++                else
++                    consumeExpr
++
+             let bindCall =
+                 mkSynCall bindName holeFill.Range (bindArgs @ [ consumeExpr ]) ceenv.builderValName
+
+diff --git a/src/Compiler/Driver/CompilerDiagnostics.fs b/src/Compiler/Driver/CompilerDiagnostics.fs
+index b02e053da..4709f6e30 100644
+--- a/src/Compiler/Driver/CompilerDiagnostics.fs
++++ b/src/Compiler/Driver/CompilerDiagnostics.fs
+@@ -1243,6 +1243,7 @@ type Exception with
+                 | Parser.TOKEN_EXCEPTION -> SR.GetString("Parser.TOKEN.EXCEPTION")
+                 | Parser.TOKEN_FALSE -> SR.GetString("Parser.TOKEN.FALSE")
+                 | Parser.TOKEN_FOR -> SR.GetString("Parser.TOKEN.FOR")
++                | Parser.TOKEN_FOR_BANG -> SR.GetString("Parser.TOKEN.FOR.BANG")
+                 | Parser.TOKEN_FUN -> SR.GetString("Parser.TOKEN.FUN")
+                 | Parser.TOKEN_FUNCTION -> SR.GetString("Parser.TOKEN.FUNCTION")
+                 | Parser.TOKEN_FINALLY -> SR.GetString("Parser.TOKEN.FINALLY")
+@@ -1272,6 +1273,7 @@ type Exception with
+                 | Parser.TOKEN_WHILE_BANG -> SR.GetString("Parser.TOKEN.WHILE.BANG")
+                 | Parser.TOKEN_WITH -> SR.GetString("Parser.TOKEN.WITH")
+                 | Parser.TOKEN_IF -> SR.GetString("Parser.TOKEN.IF")
++                | Parser.TOKEN_IF_BANG -> SR.GetString("Parser.TOKEN.IF.BANG")
+                 | Parser.TOKEN_DO -> SR.GetString("Parser.TOKEN.DO")
+                 | Parser.TOKEN_GLOBAL -> SR.GetString("Parser.TOKEN.GLOBAL")
+                 | Parser.TOKEN_DONE -> SR.GetString("Parser.TOKEN.DONE")
+diff --git a/src/Compiler/FSComp.txt b/src/Compiler/FSComp.txt
+index a4007147b..7843f52c9 100644
+--- a/src/Compiler/FSComp.txt
++++ b/src/Compiler/FSComp.txt
+@@ -1608,6 +1608,11 @@ featureStrictIndentation,"Raises errors on incorrect indentation, allows better
+ featureConstraintIntersectionOnFlexibleTypes,"Constraint intersection on flexible types"
+ featureChkNotTailRecursive,"Raises warnings if a member or function has the 'TailCall' attribute, but is not being used in a tail recursive way."
+ featureWhileBang,"'while!' expression"
++featureIfBang,"'if!' expression"
++featureForBang,"'for!' expression"
++featureWhileExpr,"'WhileExpr' builder method for unconstrained 'while' guard in computation expressions"
++featureForExpr,"'ForExpr' builder method for unconstrained 'for' collection in computation expressions"
++featureIfExpr,"'IfExpr' builder method for unconstrained 'if' guard in computation expressions"
+ featureExtendedFixedBindings,"extended fixed bindings for byref and GetPinnableReference"
+ featurePreferStringGetPinnableReference,"prefer String.GetPinnableReference in fixed bindings"
+ featurePreferExtensionMethodOverPlainProperty,"prefer extension method over plain property"
+diff --git a/src/Compiler/FSStrings.resx b/src/Compiler/FSStrings.resx
+index 9e4712498..738a902e8 100644
+--- a/src/Compiler/FSStrings.resx
++++ b/src/Compiler/FSStrings.resx
+@@ -618,6 +618,9 @@
+   <data name="Parser.TOKEN.FOR" xml:space="preserve">
+     <value>keyword 'for'</value>
+   </data>
++  <data name="Parser.TOKEN.FOR.BANG" xml:space="preserve">
++    <value>keyword 'for!'</value>
++  </data>
+   <data name="Parser.TOKEN.FUN" xml:space="preserve">
+     <value>keyword 'fun'</value>
+   </data>
+@@ -693,6 +696,9 @@
+   <data name="Parser.TOKEN.IF" xml:space="preserve">
+     <value>keyword 'if'</value>
+   </data>
++  <data name="Parser.TOKEN.IF.BANG" xml:space="preserve">
++    <value>keyword 'if!'</value>
++  </data>
+   <data name="Parser.TOKEN.DO" xml:space="preserve">
+     <value>keyword 'do'</value>
+   </data>
+diff --git a/src/Compiler/Facilities/CompilerLocation.fs b/src/Compiler/Facilities/CompilerLocation.fs
+index 9284daac2..117fefd38 100644
+--- a/src/Compiler/Facilities/CompilerLocation.fs
++++ b/src/Compiler/Facilities/CompilerLocation.fs
+@@ -20,7 +20,14 @@ module internal FSharpEnvironment =
+     let FSharpBannerVersion =
+         UtilsStrings.SR.fSharpBannerVersion (FSharp.BuildProperties.fsProductVersion, FSharp.BuildProperties.fsLanguageVersion)
+
+-    let FSharpProductName = UtilsStrings.SR.buildProductName (FSharpBannerVersion)
++    /// CE-Enhancements patch identifier — visible in `fsc --version` and the compiler banner.
++    /// Format: "Microsoft (R) F# Compiler version <base> [CE-Enhancements v1]"
++    /// The base version ties this build back to the upstream SDK release it was branched from.
++    [<Literal>]
++    let CEEnhancementsSuffix = " [CE-Enhancements v1]"
++
++    let FSharpProductName =
++        UtilsStrings.SR.buildProductName (FSharpBannerVersion) + CEEnhancementsSuffix
+
+     let versionOf<'t> : (string | null) =
+         match typeof<'t>.Assembly.GetName().Version with
+diff --git a/src/Compiler/Facilities/LanguageFeatures.fs b/src/Compiler/Facilities/LanguageFeatures.fs
+index 1bc318370..5a181ff12 100644
+--- a/src/Compiler/Facilities/LanguageFeatures.fs
++++ b/src/Compiler/Facilities/LanguageFeatures.fs
+@@ -78,6 +78,11 @@ type LanguageFeature =
+     | WarningWhenTailRecAttributeButNonTailRecUsage
+     | UnmanagedConstraintCsharpInterop
+     | WhileBang
++    | IfBang
++    | ForBang
++    | WhileExpr
++    | ForExpr
++    | IfExpr
+     | ReuseSameFieldsInStructUnions
+     | ExtendedFixedBindings
+     | PreferStringGetPinnableReference
+@@ -259,6 +264,11 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
+                 LanguageFeature.FromEndSlicing, previewVersion // Unfinished features --- needs work
+                 LanguageFeature.MethodOverloadsCache, previewVersion // Performance optimization for overload resolution
+                 LanguageFeature.ImplicitDIMCoverage, languageVersion110
++                LanguageFeature.IfBang, previewVersion
++                LanguageFeature.ForBang, previewVersion
++                LanguageFeature.WhileExpr, previewVersion
++                LanguageFeature.ForExpr, previewVersion
++                LanguageFeature.IfExpr, previewVersion
+             ]
+
+     static let defaultLanguageVersion = LanguageVersion("default")
+@@ -418,6 +428,11 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
+         | LanguageFeature.WarningWhenTailRecAttributeButNonTailRecUsage -> FSComp.SR.featureChkNotTailRecursive ()
+         | LanguageFeature.UnmanagedConstraintCsharpInterop -> FSComp.SR.featureUnmanagedConstraintCsharpInterop ()
+         | LanguageFeature.WhileBang -> FSComp.SR.featureWhileBang ()
++        | LanguageFeature.IfBang -> FSComp.SR.featureIfBang ()
++        | LanguageFeature.ForBang -> FSComp.SR.featureForBang ()
++        | LanguageFeature.WhileExpr -> FSComp.SR.featureWhileExpr ()
++        | LanguageFeature.ForExpr -> FSComp.SR.featureForExpr ()
++        | LanguageFeature.IfExpr -> FSComp.SR.featureIfExpr ()
+         | LanguageFeature.ReuseSameFieldsInStructUnions -> FSComp.SR.featureReuseSameFieldsInStructUnions ()
+         | LanguageFeature.ExtendedFixedBindings -> FSComp.SR.featureExtendedFixedBindings ()
+         | LanguageFeature.PreferStringGetPinnableReference -> FSComp.SR.featurePreferStringGetPinnableReference ()
+diff --git a/src/Compiler/Facilities/LanguageFeatures.fsi b/src/Compiler/Facilities/LanguageFeatures.fsi
+index fd6182c9d..a3411cf4d 100644
+--- a/src/Compiler/Facilities/LanguageFeatures.fsi
++++ b/src/Compiler/Facilities/LanguageFeatures.fsi
+@@ -68,6 +68,11 @@ type LanguageFeature =
+     | WarningWhenTailRecAttributeButNonTailRecUsage
+     | UnmanagedConstraintCsharpInterop
+     | WhileBang
++    | IfBang
++    | ForBang
++    | WhileExpr
++    | ForExpr
++    | IfExpr
+     | ReuseSameFieldsInStructUnions
+     | ExtendedFixedBindings
+     | PreferStringGetPinnableReference
+diff --git a/src/Compiler/Service/ServiceLexing.fs b/src/Compiler/Service/ServiceLexing.fs
+index 5ce87706c..907d6a339 100644
+--- a/src/Compiler/Service/ServiceLexing.fs
++++ b/src/Compiler/Service/ServiceLexing.fs
+@@ -379,6 +379,8 @@ module internal TokenClassifications =
+         | WHEN
+         | WHILE
+         | WHILE_BANG
++        | IF_BANG
++        | FOR_BANG
+         | WITH
+         | IF
+         | THEN
+@@ -1265,6 +1267,8 @@ type FSharpTokenKind =
+     | When
+     | While
+     | WhileBang
++    | IfBang
++    | ForBang
+     | With
+     | Hash
+     | Ampersand
+@@ -1465,6 +1469,8 @@ type FSharpToken =
+         | WHEN -> FSharpTokenKind.When
+         | WHILE -> FSharpTokenKind.While
+         | WHILE_BANG -> FSharpTokenKind.WhileBang
++        | IF_BANG -> FSharpTokenKind.IfBang
++        | FOR_BANG -> FSharpTokenKind.ForBang
+         | WITH -> FSharpTokenKind.With
+         | HASH -> FSharpTokenKind.Hash
+         | AMP -> FSharpTokenKind.Ampersand
+diff --git a/src/Compiler/Service/ServiceLexing.fsi b/src/Compiler/Service/ServiceLexing.fsi
+index fab55c464..a89da1c64 100755
+--- a/src/Compiler/Service/ServiceLexing.fsi
++++ b/src/Compiler/Service/ServiceLexing.fsi
+@@ -443,6 +443,8 @@ type public FSharpTokenKind =
+     | When
+     | While
+     | WhileBang
++    | IfBang
++    | ForBang
+     | With
+     | Hash
+     | Ampersand
+diff --git a/src/Compiler/SyntaxTree/LexFilter.fs b/src/Compiler/SyntaxTree/LexFilter.fs
+index ed5da9fd0..ec504d471 100644
+--- a/src/Compiler/SyntaxTree/LexFilter.fs
++++ b/src/Compiler/SyntaxTree/LexFilter.fs
+@@ -1321,7 +1321,7 @@ type LexFilterImpl (
+             | EOF _ -> false
+             | _ ->
+                 not (isSameLine()) ||
+-                (match peekNextToken() with TRY | MATCH | MATCH_BANG | IF | LET _ | FOR | WHILE | WHILE_BANG -> true | _ -> false)
++                (match peekNextToken() with TRY | MATCH | MATCH_BANG | IF | IF_BANG | LET _ | FOR | FOR_BANG | WHILE | WHILE_BANG -> true | _ -> false)
+
+         // Look for '=' or '.Id.id.id = ' after an identifier
+         let rec isLongIdentEquals token =
+@@ -2503,7 +2503,7 @@ type LexFilterImpl (
+                 pushCtxtSeqBlock tokenTup AddBlockEnd
+                 returnToken tokenLexbufState OELSE
+
+-        | (ELIF | IF), _ ->
++        | (ELIF | IF | IF_BANG), _ ->
+             if debug then dprintf "IF, pushing CtxtIf(%a)\n" outputPos tokenStartPos
+             pushCtxt tokenTup (CtxtIf tokenStartPos)
+             returnToken tokenLexbufState token
+@@ -2513,7 +2513,7 @@ type LexFilterImpl (
+             pushCtxt tokenTup (CtxtMatch tokenStartPos)
+             returnToken tokenLexbufState token
+
+-        | FOR, _ ->
++        | (FOR | FOR_BANG), _ ->
+             if debug then dprintf "FOR, pushing CtxtFor(%a)\n" outputPos tokenStartPos
+             pushCtxt tokenTup (CtxtFor tokenStartPos)
+             returnToken tokenLexbufState token
+diff --git a/src/Compiler/lex.fsl b/src/Compiler/lex.fsl
+index 2e72a9ab2..5ca251fbc 100644
+--- a/src/Compiler/lex.fsl
++++ b/src/Compiler/lex.fsl
+@@ -357,6 +357,12 @@ rule token (args: LexArgs) (skip: bool) = parse
+  | "while!"
+      { WHILE_BANG }
+
++ | "if!"
++     { IF_BANG }
++
++ | "for!"
++     { FOR_BANG }
++
+  | ident '!'
+      { let tok = Keywords.KeywordOrIdentifierToken args lexbuf (lexemeTrimRight lexbuf 1)
+        match tok with
+diff --git a/src/Compiler/pars.fsy b/src/Compiler/pars.fsy
+index 9208d5034..6e60c00e4 100644
+--- a/src/Compiler/pars.fsy
++++ b/src/Compiler/pars.fsy
+@@ -84,7 +84,7 @@ let parse_error_rich = Some(fun (ctxt: ParseErrorContext<_>) ->
+ %token EXCEPTION FALSE FOR FUN FUNCTION IF IN JOIN_IN FINALLY DO_BANG
+ %token LAZY OLAZY MATCH MATCH_BANG MUTABLE NEW OF
+ %token OPEN OR REC THEN TO TRUE TRY TYPE VAL INLINE INTERFACE INSTANCE CONST
+-%token WHEN WHILE WHILE_BANG WITH HASH AMP AMP_AMP QUOTE LPAREN RPAREN RPAREN_COMING_SOON RPAREN_IS_HERE STAR COMMA RARROW GREATER_BAR_RBRACK GREATER_BAR_RBRACE LPAREN_STAR_RPAREN
++%token WHEN WHILE WHILE_BANG IF_BANG FOR_BANG WITH HASH AMP AMP_AMP QUOTE LPAREN RPAREN RPAREN_COMING_SOON RPAREN_IS_HERE STAR COMMA RARROW GREATER_BAR_RBRACK GREATER_BAR_RBRACE LPAREN_STAR_RPAREN
+ %token QMARK QMARK_QMARK DOT COLON COLON_COLON COLON_GREATER COLON_QMARK_GREATER COLON_QMARK COLON_EQUALS SEMICOLON
+ %token SEMICOLON_SEMICOLON LARROW EQUALS LBRACK LBRACK_BAR LBRACE_BAR LBRACK_LESS
+ %token BAR_RBRACK BAR_RBRACE UNDERSCORE
+@@ -4324,6 +4324,32 @@ declExpr:
+       { let mIf = rhs parseState 1
+         $3 $2 mIf false }
+
++  | IF_BANG declExpr ifExprCases %prec expr_if
++      { let mIfBang = rhs parseState 1
++        parseState.LexBuffer.CheckLanguageFeatureAndRecover LanguageFeature.IfBang mIfBang
++        let ifThenElse = $3 $2 mIfBang false
++        match ifThenElse with
++        | SynExpr.IfThenElse(guardExpr, thenExpr, elseExprOpt, _, _, mFull, _) ->
++            let mPat = guardExpr.Range.EndRange
++            let trueClause = SynMatchClause(SynPat.Const(SynConst.Bool true, mPat), None, thenExpr, thenExpr.Range, DebugPointAtTarget.Yes, SynMatchClauseTrivia.Zero)
++            let elseExpr = match elseExprOpt with Some e -> e | None -> SynExpr.ImplicitZero mPat
++            let falseClause = SynMatchClause(SynPat.Const(SynConst.Bool false, mPat), None, elseExpr, elseExpr.Range, DebugPointAtTarget.Yes, SynMatchClauseTrivia.Zero)
++            let spBind = DebugPointAtBinding.Yes(unionRanges mIfBang guardExpr.Range)
++            let trivia: SynExprMatchBangTrivia = { MatchBangKeyword = mIfBang; WithKeyword = mIfBang }
++            SynExpr.MatchBang(spBind, guardExpr, [trueClause; falseClause], mFull, trivia)
++        | other -> other }
++
++  | IF_BANG declExpr recover %prec expr_if
++      { errorR (Error(FSComp.SR.parsIncompleteIf (), rhs parseState 1))
++        let ifExpr = $2
++        let mIfBang = rhs parseState 1
++        parseState.LexBuffer.CheckLanguageFeatureAndRecover LanguageFeature.IfBang mIfBang
++        let mThen = ifExpr.Range.EndRange
++        let m = unionRanges mIfBang mThen
++        let spIfToThen = DebugPointAtBinding.Yes m
++        let trivia = { IfKeyword = mIfBang; IsElif = false; ThenKeyword = mThen; ElseKeyword = None; IfToThenRange = m }
++        SynExpr.IfThenElse($2, arbExpr ("if1", mThen), None, spIfToThen, true, m, trivia) }
++
+   | IF declExpr recover %prec expr_if
+       { errorR (Error(FSComp.SR.parsIncompleteIf (), rhs parseState 1))
+         let ifExpr = $2
+@@ -4368,6 +4394,21 @@ declExpr:
+         parseState.LexBuffer.CheckLanguageFeatureAndRecover LanguageFeature.WhileBang mKeyword
+         SynExpr.WhileBang ($2 mKeyword) }
+
++  | FOR_BANG forLoopBinder doToken typedSequentialExprBlock doneDeclEnd
++      { let mFor = rhs parseState 1
++        parseState.LexBuffer.CheckLanguageFeatureAndRecover LanguageFeature.ForBang mFor
++        let spFor = DebugPointAtFor.Yes mFor
++        let (pat, expr, _, spIn) = $2
++        SynExpr.ForEach(spFor, spIn, SeqExprOnly false, false, pat, expr, $4, unionRanges mFor $5) }
++
++  | FOR_BANG forLoopBinder doToken typedSequentialExprBlock ends_coming_soon_or_recover
++      { let mFor = rhs parseState 1
++        parseState.LexBuffer.CheckLanguageFeatureAndRecover LanguageFeature.ForBang mFor
++        if not $5 then reportParseErrorAt mFor (FSComp.SR.parsUnexpectedEndOfFileFor ())
++        let spFor = DebugPointAtFor.Yes mFor
++        let (pat, expr, _, spIn) = $2
++        SynExpr.ForEach(spFor, spIn, SeqExprOnly false, false, pat, expr, $4, unionRanges mFor $4.Range) }
++
+   | FOR forLoopBinder doToken typedSequentialExprBlock doneDeclEnd
+       { let mFor = rhs parseState 1
+         let mDo = rhs parseState 3
+diff --git a/tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj b/tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj
+index f5d104840..9711ad663 100644
+--- a/tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj
++++ b/tests/FSharp.Compiler.ComponentTests/FSharp.Compiler.ComponentTests.fsproj
+@@ -344,6 +344,8 @@
+     <Compile Include="Language\FixedBindings\FixedBindings.fs" />
+     <Compile Include="Language\ExtensionMethodTests.fs" />
+     <Compile Include="Language\WhileBangTests.fs" />
++    <Compile Include="Language\CEEnhancementsTests.fs" />
++    <Compile Include="Language\CEExprMethodTests.fs" />
+     <Compile Include="Language\StaticClassTests.fs" />
+     <Compile Include="Language\PrintfFormatTests.fs" />
+     <Compile Include="Language\InterfaceTests.fs" />
+diff --git a/tests/FSharp.Compiler.ComponentTests/Language/CEEnhancementsTests.fs b/tests/FSharp.Compiler.ComponentTests/Language/CEEnhancementsTests.fs
+new file mode 100644
+index 000000000..b96d50a2c
+--- /dev/null
++++ b/tests/FSharp.Compiler.ComponentTests/Language/CEEnhancementsTests.fs
+@@ -0,0 +1,1657 @@
++// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
++
++namespace FSharp.Compiler.ComponentTests.Language
++
++open Xunit
++open FSharp.Test.Compiler
++open FSharp.Test
++
++module CEEnhancementsTests =
++
++    // ---------------------------------------------------------------
++    // BindReturn poisons do! — Issue 1 (Most Critical)
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``BindReturn does not poison do! — builder with BindReturn and do! compiles`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
++    member _.MergeSources(a: Expr, b: Expr) = Seq [a; b]
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    do! Assign("a", C 1)
++    do! Assign("b", C 2)
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``BindReturn still works for let! when BindReturn exists`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Return(e: Expr) = e
++    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    let! x = C 42
++    return x
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // if! tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``if! desugars to Bind with bool branches`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.Bind(x: Async<'T>, f: 'T -> Async<'U>) = async.Bind(x, f)
++    member _.Return(x: 'T) = async.Return(x)
++    member _.Zero() = async.Return(())
++    member _.Combine(a, b) = async.Bind(a, fun () -> b)
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    if! async { return true } then
++        return 1
++    else
++        return 2
++}
++        """
++        |> withLangVersionPreview
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``if! without else uses Zero`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.Bind(x: Async<'T>, f: 'T -> Async<'U>) = async.Bind(x, f)
++    member _.Return(x: 'T) = async.Return(x)
++    member _.Zero() = async.Return(())
++    member _.Combine(a, b) = async.Bind(a, fun () -> b)
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    if! async { return true } then
++        return ()
++}
++        """
++        |> withLangVersionPreview
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``if! requires preview language version`` () =
++        FSharp """
++module Test
++let test () = async {
++    if! async { return true } then
++        return 1
++    else
++        return 2
++}
++        """
++        |> withLangVersion80
++        |> typecheck
++        |> shouldFail
++        |> withDiagnosticMessageMatches "if!"
++
++    [<Fact>]
++    let ``if! on builder without Bind produces error`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.Return(x: 'T) = async.Return(x)
++    member _.Zero() = async.Return(())
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    if! async { return true } then
++        return 1
++    else
++        return 2
++}
++        """
++        |> withLangVersionPreview
++        |> typecheck
++        |> shouldFail
++        |> withDiagnosticMessageMatches "Bind"
++
++    // ---------------------------------------------------------------
++    // for! tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``for! desugars to For without IEnumerable constraint`` () =
++        FSharp """
++module Test
++
++type MyCollection<'T> = Items of 'T list
++
++type Builder() =
++    member _.For(Items xs: MyCollection<'T>, f: 'T -> Async<unit>) =
++        async {
++            for x in xs do
++                do! f x
++        }
++    member _.Zero() = async.Return(())
++    member _.Combine(a, b) = async.Bind(a, fun () -> b)
++    member _.Delay(f) = async.Delay(f)
++    member _.Return(x) = async.Return(x)
++
++let b = Builder()
++
++let test () = b {
++    for! x in Items [1; 2; 3] do
++        return ()
++}
++        """
++        |> withLangVersionPreview
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``for! requires preview language version`` () =
++        FSharp """
++module Test
++let test () = async {
++    for! x in async { return [1;2;3] } do
++        return ()
++}
++        """
++        |> withLangVersion80
++        |> typecheck
++        |> shouldFail
++        |> withDiagnosticMessageMatches "for!"
++
++    // ---------------------------------------------------------------
++    // while! carrier-free desugaring tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``while! works with async builder`` () =
++        FSharp """
++let mutable count = 0
++
++let asyncCondition = async {
++    return count < 10
++}
++
++async {
++    count <- 1
++
++    while! asyncCondition do
++        count <- count + 2
++
++    count <- count + 1
++    return count
++}
++|> Async.RunSynchronously
++|> printfn "%d"
++        """
++        |> withLangVersion80
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "12"
++
++    [<Fact>]
++    let ``while non-bang still uses While member`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.While(guard: unit -> bool, body: Async<unit>) =
++        async {
++            while guard() do
++                do! body
++        }
++    member _.Zero() = async.Return(())
++    member _.Combine(a, b) = async.Bind(a, fun () -> b)
++    member _.Delay(f: unit -> Async<'T>) = async.Delay(f)
++    member _.Return(x) = async.Return(x)
++
++let b = Builder()
++
++let test () = b {
++    let mutable i = 0
++    while i < 5 do
++        i <- i + 1
++    return i
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // Regression tests — async, task, seq behavior unchanged
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``async let! do! for while match! all work`` () =
++        FSharp """
++module Test
++
++let test () = async {
++    let! x = async { return 1 }
++    do! async { return () }
++    for i in [1..3] do
++        do! async { return () }
++    while false do
++        do! async { return () }
++    match! async { return Some 1 } with
++    | Some v -> return v + x
++    | None -> return 0
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``task let! do! work`` () =
++        FSharp """
++module Test
++open System.Threading.Tasks
++
++let test () = task {
++    let! x = Task.FromResult(1)
++    do! Task.Delay(0)
++    return x
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``seq yield and yield! work`` () =
++        FSharp """
++module Test
++
++let test () = seq {
++    yield 1
++    yield! [2; 3]
++    for i in [4..6] do
++        yield i
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // Full AST builder — exercises all CE enhancements together
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``Full AST builder — mixed let! do! and! with overloaded Bind and BindReturn`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
++    member _.MergeSources(a: Expr, b: Expr) = Seq [a; b]
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// Mixed let! and do! — do! must use Bind(unit->Expr), not BindReturn
++let r1 = b {
++    let! x = C 1
++    do! Assign("a", x)
++    return x
++}
++
++// let! chain — inner let! uses BindReturn optimization
++let r2 = b {
++    let! x = C 1
++    let! y = C 2
++    return Seq [x; y]
++}
++
++// and! with Bind2Return (the user's workaround for non-tuple MergeSources)
++let r3 = b {
++    let! x = C 1
++    let! y = C 2
++    return x
++}
++
++// do! only — the original BindReturn poisoning repro
++let r4 = b {
++    do! Assign("a", C 1)
++    do! Assign("b", C 2)
++}
++
++// let! followed by do! at final position
++let r5 = b {
++    let! x = C 1
++    do! Assign("a", x)
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``Full AST builder — executes correctly at runtime`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
++    member _.MergeSources(a: Expr, b: Expr) = Seq [a; b]
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// do! only test
++let r = b {
++    do! Assign("a", C 1)
++    do! Assign("b", C 2)
++}
++
++// Verify the structure — Bind(unit->Expr) produces Seq, not Let
++match r with
++| Seq _ -> printfn "PASS: do! used Bind(unit->Expr) overload"
++| Let _ -> printfn "FAIL: do! incorrectly used BindReturn"
++| _ -> printfn "FAIL: unexpected structure %A" r
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    // ---------------------------------------------------------------
++    // FS0041 Overload Ambiguity — builder with dual BindReturn overloads
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``FS0041 — BindReturn with unit overload does not cause ambiguity for let! return`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.BindReturn(x: Expr, f: Expr -> Expr) = Let("x", x, f (C 0))
++    member _.BindReturn(x: Expr, f: unit -> Expr) = Seq [x; f()]
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// This should resolve to BindReturn(Expr, Expr -> Expr) without FS0041
++let r1 = b {
++    let! x = C 42
++    return x
++}
++
++// do! should still use Bind(unit->Expr) path
++let r2 = b {
++    do! Assign("a", C 1)
++    do! Assign("b", C 2)
++}
++
++// let! + do! in same CE
++let r3 = b {
++    let! x = C 1
++    do! Assign("a", x)
++    return x
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``FS0041 — overloaded Bind does not cause ambiguity in non-final do!`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Seq of Expr list | Nop | Assign of string * Expr
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// do! in non-final position — must select Bind(unit->Expr)
++// Type annotation on return needed: x is unconstrained, Return has 2 overloads
++let r = b {
++    do! Assign("a", C 1)
++    let! x = C 2
++    return (x : Expr)
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // Full WASM CE Reference Demo — All Features (Stack Approach)
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``WASM CE reference demo — all features compile and run`` () =
++        FSharp """
++#nowarn "0086"
++
++module Test
++
++// AST
++type Expr =
++    | C of int
++    | Let of string * Expr * Expr
++    | LetMut of string * Expr * Expr
++    | Seq of Expr list
++    | Assign of string * Expr
++    | LG of string
++    | If of Expr * Expr * Expr
++    | Loop of string * Expr
++    | Block of string * Expr
++    | Break of string
++    | Continue of string
++    | Binary of string * Expr * Expr
++    | Yield of Expr
++    | Nop
++
++// Helper types
++type MutInit = { Init: Expr }
++let mut (e: Expr) : MutInit = { Init = e }
++
++// DSL Operators
++module WasmOps =
++    let (+) (a: Expr) (b: Expr) = Binary("add", a, b)
++    let (<) (a: Expr) (b: Expr) = Binary("lt_s", a, b)
++    let (&&&) (a: Expr) (b: Expr) = Binary("and", a, b)
++    let (==) (a: Expr) (b: Expr) = Binary("eq", a, b)
++    let (<--) (n: string) (v: Expr) : Expr = Assign(n, v)
++    let inline (<!) a b = a < C b
++    let inline (+!) a b = a + C b
++    let inline (==!) a b = a == C b
++
++open WasmOps
++
++// Shared state
++let _whileBangGuards = System.Collections.Generic.Stack<Expr>()
++let mutable _ctr = 0
++
++let fresh () =
++    _ctr <- Microsoft.FSharp.Core.Operators.(+) _ctr 1
++    $"$w{_ctr}"
++
++let mkExit (lbl: string) = $"{lbl}_exit"
++
++// The Builder
++type WasmBuilder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) : Expr =
++        let n = fresh ()
++        Let(n, e, k (LG n))
++
++    member _.Bind(e: Expr, k: unit -> Expr) : Expr =
++        let r = k ()
++        match r with
++        | Nop -> e
++        | _ -> Seq [ e; r ]
++
++    member _.Bind(m: MutInit, k: Expr -> Expr) : Expr =
++        let n = fresh ()
++        LetMut(n, m.Init, k (LG n))
++
++    member _.Bind(g: Expr, k: bool -> Expr) : Expr =
++        _whileBangGuards.Push(g)
++        k true
++
++    member _.While(_: unit -> bool, body: Expr) : Expr =
++        if _whileBangGuards.Count > 0 then
++            let g = _whileBangGuards.Pop()
++            let lbl = fresh ()
++            let exit = mkExit lbl
++            Block(exit, Loop(lbl, If(g, Seq [ body; Continue lbl ], Break exit)))
++        else
++            body
++
++    member _.Bind2Return(a: Expr, b: Expr, f: Expr * Expr -> Expr) : Expr =
++        let n1 = fresh ()
++        let n2 = fresh ()
++        Let(n1, a, Let(n2, b, f (LG n1, LG n2)))
++
++    member _.Bind2(a: Expr, b: Expr, f: Expr * Expr -> Expr) : Expr =
++        let n1 = fresh ()
++        let n2 = fresh ()
++        Let(n1, a, Let(n2, b, f (LG n1, LG n2)))
++
++    member _.Return(e: Expr) : Expr = e
++    member _.ReturnFrom(e: Expr) : Expr = e
++    member _.Return(_: unit) : Expr = Nop
++    member _.Yield(e: Expr) : Expr = Yield e
++    member _.Zero() : Expr = Nop
++
++    member _.Combine(a: Expr, b: Expr) : Expr =
++        match a, b with
++        | Nop, x | x, Nop -> x
++        | _ -> Seq [ a; b ]
++
++    member _.For(items: Expr, k: Expr -> Expr) : Expr =
++        let n = fresh ()
++        Let(n, items, k (LG n))
++
++    member _.Delay(f: unit -> Expr) : Expr = f ()
++    member _.Run(e: Expr) : Expr = e
++
++    member _.Using(res: #System.IDisposable, k) : Expr =
++        try k res
++        finally res.Dispose()
++
++let wasm = WasmBuilder()
++
++// Test harness
++let mutable pass = 0
++let mutable fail = 0
++
++let test (name: string) (f: unit -> unit) =
++    try
++        f ()
++        pass <- Microsoft.FSharp.Core.Operators.(+) pass 1
++        printfn "  PASS %s" name
++    with ex ->
++        fail <- Microsoft.FSharp.Core.Operators.(+) fail 1
++        printfn "  FAIL %s - %s" name ex.Message
++
++let rec flatSeq =
++    function
++    | Seq xs -> List.collect flatSeq xs
++    | x -> [ x ]
++
++// T1: let! + return
++test "T1: let!+return" (fun () ->
++    let r =
++        wasm {
++            let! x = C 10
++            return (x : Expr)
++        }
++
++    match r with
++    | Let(_, C 10, LG _) -> ()
++    | _ -> failwith $"%A{r}")
++
++// T2: multiple do!
++test "T2: multi do!" (fun () ->
++    let r =
++        wasm {
++            do! "a" <-- C 1
++            do! "b" <-- C 2
++            do! "c" <-- C 3
++        }
++
++    let f = flatSeq r
++
++    match f with
++    | [ Assign("a", _); Assign("b", _); Assign("c", _) ] -> ()
++    | _ -> failwith $"%A{f}")
++
++// T3: while! single do!
++test "T3: while! 1x do!" (fun () ->
++    let r =
++        wasm {
++            while! (LG "cond") do
++                do! "x" <-- C 1
++        }
++
++    match r with
++    | Block(_, Loop(_, If(LG "cond", _, _))) -> ()
++    | _ -> failwith $"%A{r}")
++
++// T4: while! multiple do!
++test "T4: while! 3x do!" (fun () ->
++    let r =
++        wasm {
++            while! (LG "cond") do
++                do! "x" <-- C 1
++                do! "y" <-- C 2
++                do! "z" <-- C 3
++        }
++
++    match r with
++    | Block _ -> ()
++    | _ -> failwith $"%A{r}")
++
++// T5: nested while!
++test "T5: nested while!" (fun () ->
++    let r =
++        wasm {
++            while! (LG "outer") do
++                while! (LG "inner") do
++                    do! "x" <-- C 42
++                do! "y" <-- C 99
++        }
++
++    match r with
++    | Block _ -> ()
++    | _ -> failwith $"%A{r}")
++
++// T6: let! + while! + return
++test "T6: let!+while!+return" (fun () ->
++    let r =
++        wasm {
++            let! acc = mut (C 0)
++
++            while! (LG "cond") do
++                do! "i" <-- (LG "i" +! 1)
++
++            return acc
++        }
++
++    match r with
++    | LetMut _ -> ()
++    | _ -> failwith $"%A{r}")
++
++// T7: and! (FS-1063 via Bind2Return)
++test "T7: and!" (fun () ->
++    let r =
++        wasm {
++            let! x = C 10
++            and! y = C 20
++            return x + y
++        }
++
++    match r with
++    | Let(n1, C 10, Let(n2, C 20, Binary("add", LG a, LG b))) when a = n1 && b = n2 -> ()
++    | _ -> failwith $"%A{r}")
++
++// T8: match!
++test "T8: match!" (fun () ->
++    let r =
++        wasm {
++            match! (LG "tag") with
++            | x -> return (x : Expr)
++        }
++
++    match r with
++    | Let(_, LG "tag", _) -> ()
++    | _ -> failwith $"%A{r}")
++
++// T9: for
++test "T9: for" (fun () ->
++    let r =
++        wasm {
++            for item in (LG "arr") do
++                do! "acc" <-- (LG "acc" + item)
++        }
++
++    match r with
++    | Let _ -> ()
++    | _ -> failwith $"%A{r}")
++
++// T10: yield
++test "T10: yield" (fun () ->
++    let r = wasm { yield C 42 }
++
++    match r with
++    | Yield(C 42) -> ()
++    | _ -> failwith $"%A{r}")
++
++// T11: use
++test "T11: use" (fun () ->
++    let r =
++        wasm {
++            use _ = { new System.IDisposable with member _.Dispose() = () }
++            return C 1
++        }
++
++    match r with
++    | C 1 -> ()
++    | _ -> failwith $"%A{r}")
++
++// T12: full combo
++test "T12: full combo" (fun () ->
++    let r: Expr =
++        wasm {
++            use _ = { new System.IDisposable with member _.Dispose() = () }
++
++            let! x = C 10
++            and! y = C 20
++
++            let! acc = mut (x + y)
++
++            while! ((LG "i" <! 100) &&& (LG "active" ==! 1)) do
++                do! "x" <-- C 1
++                do! "y" <-- C 2
++                do! "z" <-- C 3
++                do! "i" <-- (LG "i" +! 1)
++
++            while! (LG "outer") do
++                while! (LG "inner") do
++                    do! "innerVar" <-- C 42
++                    do! "counter" <-- C 100
++                do! "outerVar" <-- C 999
++
++            for item in (LG "arr") do
++                do! "acc" <-- (LG "acc" + item)
++
++            return acc
++        }
++
++    match r with
++    | Nop -> failwith "Nop"
++    | _ -> ())
++
++// Summary
++printfn ""
++printfn "=============================="
++printfn "  %d passed, %d failed" pass fail
++
++if fail > 0 then
++    printfn "  SOME TESTS FAILED!"
++else
++    printfn "  All tests passed!"
++        """
++        |> asExe
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // Non-bang while and for in CE builders
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``for without bang works in custom CE with For member`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Nop
++
++type Builder() =
++    member _.For(items: Expr, k: Expr -> Expr) : Expr =
++        let n = "item"
++        Let(n, items, k (C 0))
++    member _.Zero() : Expr = Nop
++    member _.Combine(a: Expr, b: Expr) = a
++    member _.Delay(f: unit -> Expr) : Expr = f ()
++    member _.Run(e: Expr) : Expr = e
++
++let b = Builder()
++
++let r = b {
++    for item in (C 42) do
++        ()
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``while without bang works in CE with While taking unit to Expr guard`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Loop of string * Expr | Nop | LG of string
++
++type Builder() =
++    member _.While(guard: unit -> Expr, body: Expr) : Expr =
++        Loop("loop", C 0)
++    member _.Zero() : Expr = Nop
++    member _.Delay(f: unit -> Expr) : Expr = f ()
++    member _.Run(e: Expr) : Expr = e
++
++let b = Builder()
++
++let r = b {
++    while (LG "cond") do
++        ()
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``while without bang with bool guard and While taking unit to bool`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Loop of string * Expr | Nop
++
++type Builder() =
++    member _.While(guard: unit -> bool, body: Expr) : Expr =
++        Loop("loop", C 0)
++    member _.Zero() : Expr = Nop
++    member _.Delay(f: unit -> Expr) : Expr = f ()
++    member _.Run(e: Expr) : Expr = e
++
++let b = Builder()
++
++let r = b {
++    while false do
++        ()
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``while bang and non-bang coexist in same builder`` () =
++        FSharp """
++module Test
++
++type Expr =
++    | C of int
++    | LG of string
++    | If of Expr * Expr * Expr
++    | Block of string * Expr
++    | Loop of string * Expr
++    | Break of string
++    | Continue of string
++    | Seq of Expr list
++    | Nop
++
++let mutable ctr = 0
++let fresh () = ctr <- ctr + 1; $"w{ctr}"
++
++let _whileBangGuards = System.Collections.Generic.Stack<Expr>()
++
++type Builder() =
++    // while! (stack approach)
++    member _.Bind(g: Expr, k: bool -> Expr) : Expr =
++        _whileBangGuards.Push(g); k true
++
++    // Standard while (non-bang, Expr guard)
++    member _.While(guard: unit -> Expr, body: Expr) : Expr =
++        let g = guard()
++        let lbl = fresh()
++        Block(lbl + "_x", Loop(lbl, If(g, Seq [ body; Continue lbl ], Break (lbl + "_x"))))
++
++    // while! pops from stack
++    member _.While(_: unit -> bool, body: Expr) : Expr =
++        if _whileBangGuards.Count > 0 then
++            let g = _whileBangGuards.Pop()
++            let lbl = fresh()
++            Block(lbl + "_x", Loop(lbl, If(g, Seq [ body; Continue lbl ], Break (lbl + "_x"))))
++        else body
++
++    member _.Zero() : Expr = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) : Expr = f ()
++    member _.Run(e: Expr) : Expr = e
++
++let b = Builder()
++
++// while! uses Bind(Expr, bool -> Expr) + While(unit -> bool, Expr)
++let r1 = b {
++    while! (LG "cond1") do
++        ()
++}
++
++// plain while uses While(unit -> Expr, Expr) directly
++let r2 = b {
++    while (LG "cond2") do
++        ()
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``for bang and non-bang coexist in same builder`` () =
++        FSharp """
++module Test
++
++type Expr = C of int | Let of string * Expr * Expr | Nop | Seq of Expr list
++
++type Builder() =
++    member _.For(items: Expr, k: Expr -> Expr) : Expr =
++        Let("item", items, k (C 0))
++    member _.Bind(e: Expr, k: Expr -> Expr) : Expr =
++        Let("bind", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) : Expr =
++        Seq [e; k()]
++    member _.Return(e: Expr) : Expr = e
++    member _.Return(_: unit) : Expr = Nop
++    member _.Zero() : Expr = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) : Expr = f ()
++    member _.Run(e: Expr) : Expr = e
++
++let b = Builder()
++
++// plain for uses For(Expr, Expr -> Expr) directly
++let r1 = b {
++    for x in (C 42) do
++        ()
++}
++
++// do! still works alongside for
++let r2 = b {
++    for x in (C 10) do
++        do! C 99
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // Runtime validation — key features verified at execution time
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``Runtime — while! executes correct number of iterations`` () =
++        FSharp """
++let mutable count = 0
++let mutable iters = 0
++
++async {
++    count <- 1
++    while! async { return count < 10 } do
++        count <- count + 2
++        iters <- iters + 1
++    return ()
++}
++|> Async.RunSynchronously
++
++// count goes 1, 3, 5, 7, 9, 11 (exits), iters = 5
++if iters = 5 && count = 11 then
++    printfn "PASS"
++else
++    printfn "FAIL: count=%d iters=%d" count iters
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``Runtime — do! with overloaded Bind selects unit continuation`` () =
++        FSharp """
++type Expr = C of int | Seq of Expr list | Let of string * Expr * Expr | Nop | Assign of string * Expr
++
++type Builder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) = Let("x", e, k (C 0))
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    do! Assign("a", C 1)
++    do! Assign("b", C 2)
++}
++
++match r with
++| Seq(Assign("a", C 1) :: _) -> printfn "PASS"
++| _ -> printfn "FAIL: %A" r
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``Runtime — and! with Bind2Return produces correct structure`` () =
++        FSharp """
++type Expr = C of int | Let of string * Expr * Expr | Binary of string * Expr * Expr | LG of string | Nop
++
++let mutable ctr = 0
++let fresh () = ctr <- ctr + 1; sprintf "w%d" ctr
++
++type Builder() =
++    member _.Bind2Return(a: Expr, b: Expr, f: Expr * Expr -> Expr) =
++        let n1 = fresh()
++        let n2 = fresh()
++        Let(n1, a, Let(n2, b, f (LG n1, LG n2)))
++    member _.Return(e: Expr) = e
++    member _.Zero() = Nop
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    let! x = C 10
++    and! y = C 20
++    return Binary("add", x, y)
++}
++
++match r with
++| Let(n1, C 10, Let(n2, C 20, Binary("add", LG a, LG b))) when a = n1 && b = n2 ->
++    printfn "PASS"
++| _ -> printfn "FAIL: %A" r
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``Runtime — for without bang iterates correctly in custom builder`` () =
++        FSharp """
++type Expr = C of int | Let of string * Expr * Expr | Nop
++
++type Builder() =
++    member _.For(items: Expr, k: Expr -> Expr) =
++        Let("item", items, k (C 0))
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = a
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    for item in (C 42) do
++        ()
++}
++
++match r with
++| Let("item", C 42, _) -> printfn "PASS"
++| _ -> printfn "FAIL: %A" r
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``Runtime — while without bang with Expr guard builds loop node`` () =
++        FSharp """
++type Expr =
++    | C of int | LG of string | If of Expr * Expr * Expr
++    | Block of string * Expr | Loop of string * Expr
++    | Break of string | Continue of string | Seq of Expr list | Nop
++
++let mutable ctr = 0
++let fresh () = ctr <- ctr + 1; sprintf "lbl%d" ctr
++
++type Builder() =
++    member _.While(guard: unit -> Expr, body: Expr) =
++        let g = guard()
++        let lbl = fresh()
++        Block(lbl + "_x", Loop(lbl, If(g, Seq [body; Continue lbl], Break (lbl + "_x"))))
++    member _.Zero() = Nop
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    while (LG "cond") do
++        ()
++}
++
++match r with
++| Block(_, Loop(_, If(LG "cond", _, _))) -> printfn "PASS"
++| _ -> printfn "FAIL: %A" r
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    // ---------------------------------------------------------------
++    // Edge cases — try/with, try/finally, use!, return! in custom CEs
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``try-with compiles in custom CE`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.Bind(x: Async<'T>, f: 'T -> Async<'U>) = async.Bind(x, f)
++    member _.Return(x: 'T) = async.Return(x)
++    member _.TryWith(body: Async<'T>, handler: exn -> Async<'T>) = async.TryWith(body, handler)
++    member _.Zero() = async.Return(())
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    try
++        let! x = async { return 42 }
++        return x
++    with ex ->
++        return -1
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``try-finally compiles in custom CE`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.Bind(x: Async<'T>, f: 'T -> Async<'U>) = async.Bind(x, f)
++    member _.Return(x: 'T) = async.Return(x)
++    member _.TryFinally(body: Async<'T>, compensation: unit -> unit) = async.TryFinally(body, compensation)
++    member _.Zero() = async.Return(())
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    try
++        let! x = async { return 42 }
++        return x
++    finally
++        ()
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``use! compiles in custom CE`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.Bind(x: Async<'T>, f: 'T -> Async<'U>) = async.Bind(x, f)
++    member _.Return(x: 'T) = async.Return(x)
++    member _.Using(res: #System.IDisposable, body: 'T -> Async<'U>) = async.Using(res, body)
++    member _.Zero() = async.Return(())
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    use! _disp = async {
++        return { new System.IDisposable with member _.Dispose() = () }
++    }
++    return 42
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``return! compiles in custom CE`` () =
++        FSharp """
++module Test
++
++type Builder() =
++    member _.ReturnFrom(x: Async<'T>) = x
++    member _.Return(x: 'T) = async.Return(x)
++    member _.Zero() = async.Return(())
++    member _.Delay(f) = async.Delay(f)
++
++let b = Builder()
++
++let test () = b {
++    return! async { return 42 }
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // while guard type NOT constrained to bool — key fork finding
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``while guard can be any type matching While signature`` () =
++        FSharp """
++module Test
++
++// Custom "condition" type — NOT bool
++[<NoComparison; NoEquality>]
++type Condition = Always | Never | Check of (unit -> bool)
++
++type Builder() =
++    member _.While(guard: unit -> Condition, body: string list) =
++        let rec loop acc =
++            match guard() with
++            | Always -> loop (acc @ body)
++            | Never -> acc
++            | Check f -> if f() then loop (acc @ body) else acc
++        loop []
++    member _.Zero() = []
++    member _.Yield(x: string) = [x]
++    member _.Combine(a: string list, b: string list) = a @ b
++    member _.Delay(f: unit -> string list) = f()
++    member _.Run(e: string list) = e
++
++let b = Builder()
++
++let mutable n = 0
++let result = b {
++    while (n <- n + 1; if n <= 3 then Check (fun () -> true) else Never) do
++        yield "item"
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``while guard with custom monadic type compiles and runs`` () =
++        FSharp """
++// Demonstrates that while guard is NOT constrained to bool.
++// The builder's While accepts unit -> Result<bool,string> instead of unit -> bool.
++
++type Builder() =
++    member _.While(guard: unit -> Result<bool,string>, body: Result<unit,string>) =
++        let rec loop () =
++            match guard() with
++            | Ok true ->
++                match body with
++                | Ok () -> loop()
++                | Error e -> Error e
++            | Ok false -> Ok ()
++            | Error e -> Error e
++        loop()
++    member _.Zero() = Ok ()
++    member _.Delay(f: unit -> Result<'T,string>) = f()
++    member _.Run(e: Result<'T,string>) = e
++
++let b = Builder()
++
++let mutable count = 0
++let result = b {
++    while (count <- count + 1; if count > 3 then Error "too many" else Ok (count <= 5)) do
++        ()
++}
++
++match result with
++| Error "too many" -> printfn "PASS"
++| _ -> printfn "FAIL: %A" result
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    // ---------------------------------------------------------------
++    // Stress tests — deeply nested CEs, many do!, complex control flow
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``Stress — 20 sequential do! in CE compiles`` () =
++        FSharp """
++module Test
++
++type Expr = Assign of string * int | Seq of Expr list | Nop
++
++type Builder() =
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(_: unit) = Nop
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let r = b {
++    do! Assign("a", 1)
++    do! Assign("b", 2)
++    do! Assign("c", 3)
++    do! Assign("d", 4)
++    do! Assign("e", 5)
++    do! Assign("f", 6)
++    do! Assign("g", 7)
++    do! Assign("h", 8)
++    do! Assign("i", 9)
++    do! Assign("j", 10)
++    do! Assign("k", 11)
++    do! Assign("l", 12)
++    do! Assign("m", 13)
++    do! Assign("n", 14)
++    do! Assign("o", 15)
++    do! Assign("p", 16)
++    do! Assign("q", 17)
++    do! Assign("r", 18)
++    do! Assign("s", 19)
++    do! Assign("t", 20)
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``Stress — nested CE blocks compile`` () =
++        FSharp """
++module Test
++
++let test () = async {
++    let! a = async {
++        let! b = async {
++            let! c = async { return 1 }
++            return c + 1
++        }
++        return b + 1
++    }
++    return a + 1
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    [<Fact>]
++    let ``Stress — if-then-else chains in CE compile`` () =
++        FSharp """
++module Test
++
++let test (x: int) = async {
++    if x > 10 then
++        let! v = async { return x * 2 }
++        return v
++    elif x > 5 then
++        do! async { return () }
++        return x + 100
++    elif x > 0 then
++        match! async { return Some x } with
++        | Some v -> return v
++        | None -> return -1
++    else
++        return 0
++}
++        """
++        |> compile
++        |> shouldSucceed
++
++    // ---------------------------------------------------------------
++    // WASM CE reference demo — full compile (IL generation verified)
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``WASM CE reference demo — runtime verification`` () =
++        FSharp """
++#nowarn "0086"
++
++type Expr =
++    | C of int | Let of string * Expr * Expr | LetMut of string * Expr * Expr
++    | Seq of Expr list | Assign of string * Expr | LG of string
++    | If of Expr * Expr * Expr | Loop of string * Expr | Block of string * Expr
++    | Break of string | Continue of string | Binary of string * Expr * Expr
++    | Yield of Expr | Nop
++
++type MutInit = { Init: Expr }
++let mut (e: Expr) : MutInit = { Init = e }
++
++module WasmOps =
++    let (+) (a: Expr) (b: Expr) = Binary("add", a, b)
++    let (<) (a: Expr) (b: Expr) = Binary("lt_s", a, b)
++    let (<--) (n: string) (v: Expr) : Expr = Assign(n, v)
++
++open WasmOps
++
++let _whileBangGuards = System.Collections.Generic.Stack<Expr>()
++let mutable _ctr = 0
++let fresh () = _ctr <- Microsoft.FSharp.Core.Operators.(+) _ctr 1; sprintf "$w%d" _ctr
++let mkExit (lbl: string) = sprintf "%s_exit" lbl
++
++type WasmBuilder() =
++    member _.Bind(e: Expr, k: Expr -> Expr) : Expr = let n = fresh() in Let(n, e, k (LG n))
++    member _.Bind(e: Expr, k: unit -> Expr) : Expr = let r = k() in match r with Nop -> e | _ -> Seq [e; r]
++    member _.Bind(m: MutInit, k: Expr -> Expr) : Expr = let n = fresh() in LetMut(n, m.Init, k (LG n))
++    // WhileBang: compiler passes guard directly, no bool constraint, no stack hack.
++    member _.WhileBang(guard: Expr, body: Expr) : Expr =
++        let lbl = fresh()
++        let exit = mkExit lbl
++        Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
++    member _.While(guard: unit -> Expr, body: Expr) : Expr =
++        let g = guard() in let lbl = fresh() in let exit = mkExit lbl
++        Block(exit, Loop(lbl, If(g, Seq [body; Continue lbl], Break exit)))
++    member _.Bind2Return(a: Expr, b: Expr, f: Expr * Expr -> Expr) : Expr =
++        let n1 = fresh() in let n2 = fresh() in Let(n1, a, Let(n2, b, f (LG n1, LG n2)))
++    member _.Bind2(a: Expr, b: Expr, f: Expr * Expr -> Expr) : Expr =
++        let n1 = fresh() in let n2 = fresh() in Let(n1, a, Let(n2, b, f (LG n1, LG n2)))
++    member _.MergeSources(a: Expr, b: Expr) : Expr * Expr = (a, b)
++    member _.BindReturn(e: Expr, f: Expr -> Expr) : Expr = let n = fresh() in Let(n, e, f (LG n))
++    member _.Return(e: Expr) : Expr = e
++    member _.ReturnFrom(e: Expr) : Expr = e
++    member _.Return(_: unit) : Expr = Nop
++    member _.Yield(e: Expr) : Expr = Yield e
++    member _.Zero() : Expr = Nop
++    member _.Combine(a: Expr, b: Expr) : Expr = match a, b with Nop, x | x, Nop -> x | _ -> Seq [a; b]
++    member _.For(items: Expr, k: Expr -> Expr) : Expr = let n = fresh() in Let(n, items, k (LG n))
++    member _.Delay(f: unit -> Expr) : Expr = f()
++    member _.Run(e: Expr) : Expr = e
++    member _.Using(res: #System.IDisposable, k) : Expr = try k res finally res.Dispose()
++
++let wasm = WasmBuilder()
++
++let mutable pass = 0
++let mutable fail = 0
++
++let test (name: string) (f: unit -> unit) =
++    try f(); pass <- Microsoft.FSharp.Core.Operators.(+) pass 1
++    with ex -> fail <- Microsoft.FSharp.Core.Operators.(+) fail 1; eprintfn "FAIL %s: %s" name ex.Message
++
++let rec flatSeq = function Seq xs -> List.collect flatSeq xs | x -> [x]
++
++// T1: let! + return
++test "T1" (fun () ->
++    let r = wasm { let! x = C 10 in return (x : Expr) }
++    match r with Let(_, C 10, LG _) -> () | _ -> failwith (sprintf "%A" r))
++
++// T2: multiple do!
++test "T2" (fun () ->
++    let r = wasm {
++        do! "a" <-- C 1
++        do! "b" <-- C 2
++        do! "c" <-- C 3
++    }
++    match flatSeq r with [Assign("a",_); Assign("b",_); Assign("c",_)] -> () | f -> failwith (sprintf "%A" f))
++
++// T3: while! single do!
++test "T3" (fun () ->
++    let r = wasm { while! (LG "cond") do do! "x" <-- C 1 }
++    match r with Block(_, Loop(_, If(LG "cond", _, _))) -> () | _ -> failwith (sprintf "%A" r))
++
++// T4: and!
++test "T4" (fun () ->
++    let r = wasm {
++        let! x = C 10
++        and! y = C 20
++        return x + y
++    }
++    match r with
++    | Let(_, _, _) -> ()
++    | _ -> failwith (sprintf "%A" r))
++
++// T5: match!
++test "T5" (fun () ->
++    let r = wasm { match! (LG "tag") with x -> return (x : Expr) }
++    match r with Let(_, LG "tag", _) -> () | _ -> failwith (sprintf "%A" r))
++
++// T6: for
++test "T6" (fun () ->
++    let r = wasm { for item in (LG "arr") do do! "acc" <-- (LG "acc" + item) }
++    match r with Let _ -> () | _ -> failwith (sprintf "%A" r))
++
++// T7: yield
++test "T7" (fun () ->
++    let r = wasm { yield C 42 }
++    match r with Yield(C 42) -> () | _ -> failwith (sprintf "%A" r))
++
++// T8: use
++test "T8" (fun () ->
++    let r = wasm { use _ = { new System.IDisposable with member _.Dispose() = () } in return C 1 }
++    match r with C 1 -> () | _ -> failwith (sprintf "%A" r))
++
++// T9: while (no bang) with Expr guard
++test "T9" (fun () ->
++    let r = wasm { while (LG "cond2") do do! "x" <-- C 99 }
++    match r with Block(_, Loop(_, If(LG "cond2", _, _))) -> () | _ -> failwith (sprintf "%A" r))
++
++// T10: full combo
++test "T10" (fun () ->
++    let r : Expr = wasm {
++        use _ = { new System.IDisposable with member _.Dispose() = () }
++        let! x = C 10
++        and! y = C 20
++        let! acc = mut (x + y)
++        while! (LG "cond") do do! "i" <-- C 1
++        while (LG "cond2") do do! "j" <-- C 2
++        for item in (LG "arr") do do! "acc" <-- (LG "acc" + item)
++        return acc
++    }
++    match r with Nop -> failwith "Nop" | _ -> ())
++
++printfn "%d passed, %d failed" pass fail
++if fail > 0 then printfn "OVERALL_FAIL" else printfn "OVERALL_PASS"
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "OVERALL_PASS"
++
++    // ---------------------------------------------------------------
++    // WhileBang builder method — compiler fix: removes bool constraint
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``WhileBang builder method — while! with non-bool guard compiles and runs`` () =
++        FSharp """
++// This test REQUIRES the compiler fix: WhileBang builder method support.
++// Without it, while! hardcodes bool via 'if __res then ... else ...'
++// and Bind would need (Expr, bool -> Expr) overload with a stack hack.
++// With WhileBang, the builder receives the guard directly — no bool constraint.
++
++type Expr =
++    | C of int | LG of string | If of Expr * Expr * Expr
++    | Block of string * Expr | Loop of string * Expr
++    | Break of string | Continue of string | Seq of Expr list | Nop
++
++let mutable ctr = 0
++let fresh () = ctr <- ctr + 1; sprintf "lbl%d" ctr
++let mkExit (lbl: string) = sprintf "%s_exit" lbl
++
++type Builder() =
++    // WhileBang: receives the guard expression directly, no bool constraint.
++    member _.WhileBang(guard: Expr, body: Expr) =
++        let lbl = fresh()
++        let exit = mkExit lbl
++        Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
++    member _.Bind(e: Expr, k: Expr -> Expr) =
++        let n = fresh()
++        Seq [e; k (LG n)]
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Return(e: Expr) = e
++    member _.Return(_: unit) = Nop
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// while! with Expr guard — NO bool involved at all
++let r = b {
++    while! (LG "cond") do
++        do! C 42
++}
++
++match r with
++| Block(_, Loop(_, If(LG "cond", _, _))) -> printfn "PASS"
++| _ -> printfn "FAIL: %A" r
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``WhileBang builder method — fallback to Bind pattern when no WhileBang defined`` () =
++        FSharp """
++// When builder has NO WhileBang method, falls back to Bind/if/Combine/Zero (bool guard).
++
++let mutable count = 0
++
++type Builder() =
++    member _.Bind(x: Async<'T>, f: 'T -> Async<'U>) = async.Bind(x, f)
++    member _.Return(x: 'T) = async.Return x
++    member _.Zero() = async.Return ()
++    member _.Combine(a: Async<unit>, b: Async<'T>) =
++        async {
++            do! a
++            return! b
++        }
++    member _.Delay(f: unit -> Async<'T>) = async.Delay f
++    member _.Run(a: Async<'T>) = Async.RunSynchronously a
++
++let b = Builder()
++
++b {
++    while! async { return count < 3 } do
++        count <- count + 1
++}
++
++if count = 3 then printfn "PASS" else printfn "FAIL: count=%d" count
++        """
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
+diff --git a/tests/FSharp.Compiler.ComponentTests/Language/CEExprMethodTests.fs b/tests/FSharp.Compiler.ComponentTests/Language/CEExprMethodTests.fs
+new file mode 100644
+index 000000000..507494e53
+--- /dev/null
++++ b/tests/FSharp.Compiler.ComponentTests/Language/CEExprMethodTests.fs
+@@ -0,0 +1,599 @@
++// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
++
++namespace FSharp.Compiler.ComponentTests.Language
++
++open Xunit
++open FSharp.Test.Compiler
++open FSharp.Test
++
++/// Tests for WhileExpr, ForExpr, and IfExpr builder methods in computation expressions.
++/// These methods allow CE builders to handle non-bang while/for/if with unconstrained types.
++module CEExprMethodTests =
++
++    // ---------------------------------------------------------------
++    // WhileExpr tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``WhileExpr with custom non-bool guard type`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Guard of string | Body of string | WhileLoop of Expr * Expr | Nop
++
++type Builder() =
++    member _.WhileExpr(guard: Expr, body: Expr) = WhileLoop(guard, body)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Body(sprintf "%A; %A" a b)
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    while (Guard "cond") do
++        ()
++}
++
++match result with
++| WhileLoop(Guard "cond", Nop) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``WhileExpr takes priority over While when both are defined`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Guard of string | Body of string | WhileLoop of Expr * Expr | OldWhile of Expr | Nop
++
++type Builder() =
++    member _.WhileExpr(guard: Expr, body: Expr) = WhileLoop(guard, body)
++    member _.While(guard: unit -> bool, body: Expr) = OldWhile(body)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Body(sprintf "%A; %A" a b)
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// When WhileExpr is present, non-bang while uses WhileExpr, not While
++let result = b {
++    while (Guard "test") do
++        ()
++}
++
++match result with
++| WhileLoop(Guard "test", Nop) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``WhileExpr with body containing do!`` () =
++        FSharp
++            """
++module Test
++
++type Expr =
++    | C of int | Assign of string * Expr | WhileLoop of Expr * Expr
++    | LG of string | Seq of Expr list | Nop
++
++type Builder() =
++    member _.WhileExpr(guard: Expr, body: Expr) = WhileLoop(guard, body)
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    while (LG "cond") do
++        do! Assign("x", C 1)
++}
++
++match result with
++| WhileLoop(LG "cond", Seq [Assign("x", C 1); Nop]) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``while still uses While method when WhileExpr is not defined`` () =
++        FSharp
++            """
++module Test
++
++type Builder() =
++    member _.While(guard: unit -> bool, body: int) = if guard() then body else 0
++    member _.Delay(f: unit -> int) = f()
++    member _.Zero() = 0
++    member _.Run(e: int) = e
++
++let b = Builder()
++
++let result = b {
++    while false do
++        ()
++}
++
++printfn "%d" result
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "0"
++
++    [<Fact>]
++    let ``WhileExpr requires preview language version`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Guard of string | Nop | WhileLoop of Expr * Expr
++
++type Builder() =
++    member _.WhileExpr(guard: Expr, body: Expr) = WhileLoop(guard, body)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    while (Guard "cond") do
++        ()
++}
++        """
++        |> withLangVersion80
++        |> typecheck
++        |> shouldFail
++
++    // ---------------------------------------------------------------
++    // ForExpr tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``ForExpr with custom non-IEnumerable collection type`` () =
++        FSharp
++            """
++module Test
++
++[<NoEquality; NoComparison>]
++type Expr = Items of string | Body of string | ForLoop of Expr * (Expr -> Expr) | Nop | Seq of Expr list
++
++type Builder() =
++    member _.ForExpr(collection: Expr, body: Expr -> Expr) = ForLoop(collection, body)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    for item in Items "arr" do
++        ()
++}
++
++match result with
++| ForLoop(Items "arr", f) ->
++    match f (Body "test") with
++    | Nop -> printfn "PASS"
++    | x -> printfn "FAIL body: %A" x
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``ForExpr skips Source wrapping`` () =
++        FSharp
++            """
++module Test
++
++[<NoEquality; NoComparison>]
++type Expr = Items of string | Body of string | ForLoop of Expr * (Expr -> Expr) | Nop
++
++type Builder() =
++    member _.ForExpr(collection: Expr, body: Expr -> Expr) = ForLoop(collection, body)
++    member _.Source(x: seq<'T>) : seq<'T> = x  // Should NOT be called when ForExpr is used
++    member _.For(items: seq<'T>, body: 'T -> Expr) = Nop  // Should NOT be called when ForExpr is used
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++// ForExpr should be used, not For+Source
++let result = b {
++    for item in Items "myArray" do
++        ()
++}
++
++match result with
++| ForLoop(Items "myArray", _) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``for still uses For method when ForExpr is not defined`` () =
++        FSharp
++            """
++module Test
++
++type Builder() =
++    member _.For(items: seq<'T>, body: 'T -> int) = Seq.sumBy body items
++    member _.Delay(f: unit -> int) = f()
++    member _.Zero() = 0
++    member _.Combine(a: int, b: int) = a + b
++    member _.Run(e: int) = e
++
++let b = Builder()
++
++let result = b {
++    for x in [1; 2; 3] do
++        ()
++}
++
++printfn "%d" result
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "0"
++
++    [<Fact>]
++    let ``ForExpr requires preview language version`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Items of string | ForLoop of Expr * (Expr -> Expr) | Nop
++
++type Builder() =
++    member _.ForExpr(collection: Expr, body: Expr -> Expr) = ForLoop(collection, body)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    for item in Items "arr" do
++        ()
++}
++        """
++        |> withLangVersion80
++        |> typecheck
++        |> shouldFail
++
++    // ---------------------------------------------------------------
++    // IfExpr tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``IfExpr with both branches`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Guard of string | Body of string | IfNode of Expr * Expr * Expr | Nop
++
++type Builder() =
++    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) = IfNode(guard, thenBranch, elseBranch)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Body(sprintf "%A; %A" a b)
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    if (Guard "cond") then
++        ()
++    else
++        ()
++}
++
++match result with
++| IfNode(Guard "cond", Nop, Nop) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``IfExpr with missing else uses Zero`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Guard of string | Body of string | IfNode of Expr * Expr * Expr | Nop
++
++type Builder() =
++    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) = IfNode(guard, thenBranch, elseBranch)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Body(sprintf "%A; %A" a b)
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    if (Guard "cond") then
++        ()
++}
++
++match result with
++| IfNode(Guard "cond", Nop, Nop) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``IfExpr with non-bool guard type`` () =
++        FSharp
++            """
++module Test
++
++type Expr =
++    | C of int | Assign of string * Expr | IfNode of Expr * Expr * Expr
++    | LG of string | Seq of Expr list | Nop
++
++type Builder() =
++    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) = IfNode(guard, thenBranch, elseBranch)
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    if (LG "flag") then
++        do! Assign("x", C 1)
++    else
++        do! Assign("x", C 2)
++}
++
++match result with
++| IfNode(LG "flag", Seq [Assign("x", C 1); Nop], Seq [Assign("x", C 2); Nop]) -> printfn "PASS"
++| x -> printfn "FAIL: %A" x
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
++
++    [<Fact>]
++    let ``if still uses standard desugaring when IfExpr is not defined`` () =
++        FSharp
++            """
++module Test
++
++type Builder() =
++    member _.Zero() = 0
++    member _.Combine(a: int, b: int) = a + b
++    member _.Delay(f: unit -> int) = f()
++    member _.Run(e: int) = e
++
++let b = Builder()
++
++let result = b {
++    if true then
++        ()
++}
++
++printfn "%d" result
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "0"
++
++    [<Fact>]
++    let ``IfExpr requires preview language version`` () =
++        FSharp
++            """
++module Test
++
++type Expr = Guard of string | IfNode of Expr * Expr * Expr | Nop
++
++type Builder() =
++    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) = IfNode(guard, thenBranch, elseBranch)
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    if (Guard "cond") then
++        ()
++}
++        """
++        |> withLangVersion80
++        |> typecheck
++        |> shouldFail
++
++    // ---------------------------------------------------------------
++    // Backward compatibility tests
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``seq while/for/if behavior unchanged`` () =
++        FSharp
++            """
++module Test
++
++let xs = seq {
++    let mutable i = 0
++    while i < 3 do
++        yield i
++        i <- i + 1
++}
++
++let ys = seq {
++    for x in [10; 20; 30] do
++        yield x + 1
++}
++
++let zs = seq {
++    if true then
++        yield 100
++    else
++        yield 200
++}
++
++printfn "%A" (Seq.toList xs)
++printfn "%A" (Seq.toList ys)
++printfn "%A" (Seq.toList zs)
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "[0; 1; 2]"
++        |> withStdOutContains "[11; 21; 31]"
++        |> withStdOutContains "[100]"
++
++    [<Fact>]
++    let ``async while/for/if behavior unchanged`` () =
++        FSharp
++            """
++module Test
++
++let test () = async {
++    let mutable i = 0
++    while i < 3 do
++        i <- i + 1
++
++    for x in [1; 2; 3] do
++        i <- i + x
++
++    if i > 5 then
++        return i
++    else
++        return 0
++}
++
++test () |> Async.RunSynchronously |> printfn "%d"
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "9"
++
++    // ---------------------------------------------------------------
++    // Combined / full integration test
++    // ---------------------------------------------------------------
++
++    [<Fact>]
++    let ``Full builder with WhileExpr, ForExpr, and IfExpr`` () =
++        FSharp
++            """
++module Test
++
++[<NoEquality; NoComparison>]
++type Expr =
++    | C of int | LG of string | Assign of string * Expr
++    | WhileLoop of Expr * Expr | ForLoop of Expr * (Expr -> Expr) | IfNode of Expr * Expr * Expr
++    | Seq of Expr list | Nop
++
++type Builder() =
++    member _.WhileExpr(guard: Expr, body: Expr) = WhileLoop(guard, body)
++    member _.ForExpr(collection: Expr, body: Expr -> Expr) = ForLoop(collection, body)
++    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) = IfNode(guard, thenBranch, elseBranch)
++    member _.Bind(e: Expr, k: unit -> Expr) = Seq [e; k()]
++    member _.Delay(f: unit -> Expr) = f()
++    member _.Zero() = Nop
++    member _.Combine(a: Expr, b: Expr) = Seq [a; b]
++    member _.Run(e: Expr) = e
++
++let b = Builder()
++
++let result = b {
++    while (LG "cond") do
++        do! Assign("i", C 1)
++
++    for item in (LG "arr") do
++        do! Assign("acc", item)
++
++    if (LG "flag") then
++        do! Assign("x", C 10)
++    else
++        do! Assign("x", C 20)
++}
++
++let mutable pass = true
++
++// Combine produces right-nested binary Seq: Seq [a; Seq [b; c]]
++let rec collectParts expr =
++    match expr with
++    | Seq [a; b] -> a :: collectParts b
++    | other -> [other]
++
++let parts = collectParts result
++
++if parts.Length < 3 then
++    printfn "FAIL: expected 3 parts, got %d: %A" parts.Length result
++    pass <- false
++else
++    match parts.[0] with
++    | WhileLoop(LG "cond", _) -> ()
++    | x -> printfn "FAIL while: %A" x; pass <- false
++
++    match parts.[1] with
++    | ForLoop(LG "arr", _) -> ()
++    | x -> printfn "FAIL for: %A" x; pass <- false
++
++    match parts.[2] with
++    | IfNode(LG "flag", _, _) -> ()
++    | x -> printfn "FAIL if: %A" x; pass <- false
++
++if pass then printfn "PASS"
++        """
++        |> withLangVersionPreview
++        |> asExe
++        |> compileExeAndRun
++        |> shouldSucceed
++        |> withStdOutContains "PASS"
