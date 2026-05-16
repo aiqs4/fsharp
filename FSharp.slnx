@@ -52,23 +52,11 @@
     </Project>
   </Folder>
   <Folder Name="/Tools/">
-    <Project Path="src/fsc/fscAnyCpuProject/fscAnyCpu.fsproj">
-      <BuildType Solution="Proto|*" Project="Debug" />
-    </Project>
-    <Project Path="src/fsc/fscArm64Project/fscArm64.fsproj">
-      <BuildType Solution="Proto|*" Project="Debug" />
-    </Project>
     <Project Path="src/FSharp.Build/FSharp.Build.fsproj">
       <BuildType Solution="Proto|*" Project="Release" />
     </Project>
     <Project Path="src/FSharp.Compiler.Interactive.Settings/FSharp.Compiler.Interactive.Settings.fsproj">
       <BuildType Solution="Proto|*" Project="Release" />
-    </Project>
-    <Project Path="src/fsi/fsiAnyCpuProject/fsiAnyCpu.fsproj">
-      <BuildType Solution="Proto|*" Project="Debug" />
-    </Project>
-    <Project Path="src/fsi/fsiArm64Project/fsiArm64.fsproj">
-      <BuildType Solution="Proto|*" Project="Debug" />
     </Project>
     <Project Path="src/fsi/fsiProject/fsi.fsproj">
       <BuildType Solution="Proto|*" Project="Debug" />

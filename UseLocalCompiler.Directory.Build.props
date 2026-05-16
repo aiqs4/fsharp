@@ -39,7 +39,26 @@
     <FSharpOverridesTargetsShim>$(LocalFSharpBuildBinPath)/Microsoft.FSharp.Overrides.NetSdk.targets</FSharpOverridesTargetsShim>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Reference Include="$(LocalFSharpCompilerPath)/artifacts/bin/FSharp.Core/$(LocalFSharpCompilerConfiguration)/netstandard2.0/FSharp.Core.dll" />
+  <!-- Gate 2 (regression matrix only): serve the local FSharp.Core the SDK's own way. FSCorePackageVersion pins the
+       implicit reference; FSCorePackageVersionSet suppresses the SDK default that inits _FSharpCoreLibraryPacksFolder,
+       so we point that (the restore feed) at RegressionLocalCorePackagesDir from the runner, else a co-located library-packs. -->
+  <PropertyGroup Condition="'$(RegressionLocalCore)' == 'true' and '$(FSharpCoreImplicitPackageVersion)' == '' and '$(FSCorePackageVersionSet)' != 'true'">
+    <FSCorePackageVersion>$(RegressionLocalCoreVersion)</FSCorePackageVersion>
+    <FSCorePackageVersionSet>true</FSCorePackageVersionSet>
+    <_FSharpCoreLibraryPacksFolder>$([MSBuild]::ValueOrDefault('$(RegressionLocalCorePackagesDir)', '$(MSBuildThisFileDirectory)library-packs'))</_FSharpCoreLibraryPacksFolder>
+  </PropertyGroup>
+
+  <Target Name="_ValidateRegressionLocalCore" BeforeTargets="CollectPackageReferences;CoreCompile"
+          Condition="'$(RegressionLocalCore)' == 'true' and '$(RegressionLocalCoreVersion)' == ''">
+    <Error Text="RegressionLocalCore is set but RegressionLocalCoreVersion is empty. The regression job must pass the exact local FSharp.Core package version." />
+  </Target>
+
+  <!-- Gate 3 (CompilerCompat and VS integration): reference the locally built FSharp.Core directly. The regression
+       matrix uses Gate 2's library-packs flow instead, so it is excluded here. -->
+  <PropertyGroup Condition="'$(LoadLocalFSharpBuild)' == 'True' and '$(RegressionLocalCore)' != 'true'">
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+  <ItemGroup Condition="'$(LoadLocalFSharpBuild)' == 'True' and '$(RegressionLocalCore)' != 'true'">
+    <Reference Include="$(LocalFSharpCompilerPath)/artifacts/bin/FSharp.Core/$(LocalFSharpCompilerConfiguration)/net10.0/FSharp.Core.dll" />
   </ItemGroup>
 </Project>

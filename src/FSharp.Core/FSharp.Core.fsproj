@@ -40,6 +40,7 @@
   </PropertyGroup>
 
     <!-- .FSharp.Core always uses the old style initialization mechanism because of SQL CLR requirements -->
+  <!-- .FSharp.Core always uses the old style initialization mechanism because of SQL CLR requirements -->
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' != 'true' and '$(Configuration)' != 'Proto'">
     <OtherFlags>$(OtherFlags) --realsig-</OtherFlags>
   </PropertyGroup>
@@ -53,8 +54,8 @@
 
   <!-- When we build FCS solution and we include FSCore as reference, set path explicitly -->
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == 'true'">
-    <OutputPath>$(ArtifactsDir)/bin/$(MSBuildProjectName)/$(Configuration)/</OutputPath>
-    <IntermediateOutputPath>$(ArtifactsDir)obj/$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>$(ArtifactsBinDir)$(MSBuildProjectName)/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>$(ArtifactsObjDir)$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
@@ -288,5 +289,4 @@
       <BuiltProjectOutputGroupKeyOutput Include="$(BuildOutputGroupLocation)\FSharp.Core.xml" />
     </ItemGroup>
   </Target>
-
 </Project>

@@ -15,7 +15,7 @@
     <MibcTargetOS Condition="$([MSBuild]::IsOSPlatform('WINDOWS'))">windows_nt</MibcTargetOS>
     <MibcTargetArchitecture>$([System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant)</MibcTargetArchitecture>
     <MibcCurrentMachineArcitecture>$(MibcTargetOS)-$(MibcTargetArchitecture)</MibcCurrentMachineArcitecture>
-    <MibcFile>$(ArtifactsDir)mibc-proto\optimization.$(MibcCurrentMachineArcitecture).mibc.runtime\DotNet_FSharp.mibc</MibcFile>
+    <MibcFile>$(ArtifactsDir)mibc-proto/optimization.$(MibcCurrentMachineArcitecture).mibc.runtime/DotNet_FSharp.mibc</MibcFile>
 
     <TargetFramework>$(FSharpNetCoreProductTargetFramework)</TargetFramework>
     <PublishReadyToRun>$(EnablePublishReadyToRun)</PublishReadyToRun>
@@ -29,8 +29,8 @@
   </ItemGroup>
 
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == 'true'">
-    <OutputPath>$(ArtifactsDir)/bin/$(MSBuildProjectName)/$(Configuration)/</OutputPath>
-    <IntermediateOutputPath>$(ArtifactsDir)obj/$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>$(ArtifactsBinDir)$(MSBuildProjectName)/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>$(ArtifactsObjDir)$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
   </PropertyGroup>
 
   <Target Name="ValidateMibcFile" AfterTargets="CopyMIBC" BeforeTargets="Build;Pack" Condition="'$(IgnoreMibc)' != 'true'">

@@ -7,11 +7,37 @@
     <PackageProjectUrl>https://github.com/dotnet/fsharp</PackageProjectUrl>
     <RepositoryUrl>https://github.com/dotnet/fsharp</RepositoryUrl>
     <LangVersion Condition="'$(FSharpLangVersion)' != ''">$(FSharpLangVersion)</LangVersion>
+
+
+
+
+     <!-- Set the default version to 0.0.0-dev to avoid issues with local builds when the version is not set via CLI or env vars. -->
+
+    <!-- MSBuildThisFileDirectory Condition="'$(MSBuildThisFileDirectory)' == ''">/home/alex/work/src/fsharp-wasm/vendor/fsharp/</MSBuildThisFileDirectory -->
     <RepoRoot Condition="'$(RepoRoot)' == ''">$(MSBuildThisFileDirectory)</RepoRoot>
+    <!-- Provide RepositoryRoot for repo-relative computations (do not force UseArtifactsOutput here) -->
+
+    <RepositoryRoot Condition="'$(RepositoryRoot)' == ''">$(MSBuildThisFileDirectory)</RepositoryRoot>
+    <!-- Shared repo artifact roots. These do not force any output layout by themselves. -->
+
+    <ArtifactsDir Condition="'$(ArtifactsDir)' == ''">$([MSBuild]::NormalizeDirectory('$(RepoRoot)', 'artifacts'))</ArtifactsDir>
+    <ArtifactsBinDir Condition="'$(ArtifactsBinDir)' == ''">$([MSBuild]::NormalizeDirectory('$(ArtifactsDir)', 'bin'))</ArtifactsBinDir>
+    <ArtifactsObjDir Condition="'$(ArtifactsObjDir)' == ''">$([MSBuild]::NormalizeDirectory('$(ArtifactsDir)', 'obj'))</ArtifactsObjDir>
+    <ArtifactsPackagesDir Condition="'$(ArtifactsPackagesDir)' == ''">$([MSBuild]::NormalizeDirectory('$(ArtifactsDir)', 'packages'))</ArtifactsPackagesDir>
+    <BootstrapArtifactsDir Condition="'$(BootstrapArtifactsDir)' == ''">$([MSBuild]::NormalizeDirectory('$(ArtifactsDir)', 'Bootstrap'))</BootstrapArtifactsDir>
+
     <AccelerateBuildsInVisualStudio>true</AccelerateBuildsInVisualStudio>
     <IgnoreMibc Condition="'$(IgnoreMibc)' == ''">$(DotNetBuildSourceOnly)</IgnoreMibc>
     <!-- When building the .NET product, there's no need to publish Windows PDBs. Any conversion to Windows PDBs will be done during staging, if necessary. -->
     <PublishWindowsPdb Condition="'$(DotNetBuild)' == 'true'">false</PublishWindowsPdb>
+
+    <!-- RestoreUseStaticGraphEvaluation>false</RestoreUseStaticGraphEvaluation -->
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <OtherFlags>$(OtherFlags) --nowin32manifest</OtherFlags>
+    <NoWin32Manifest>true</NoWin32Manifest>
+    <NoWarn>$(NoWarn);NU1900</NoWarn>
   </PropertyGroup>
 
   <!--
@@ -25,6 +51,26 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(SolutionName)' == 'FSharp.Benchmarks' and '$(BUILDING_USING_DOTNET)' != 'false'">
+      <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
+  </PropertyGroup>
+
+  <!-- Explicit opt-in for repo artifacts layout (used by build orchestration scripts). -->
+  <PropertyGroup Condition="'$(FSharpUseArtifactsOutputLayout)' == 'true' and '$(BUILDING_USING_DOTNET)' != 'false'">
+      <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
+  </PropertyGroup>
+
+  <!-- Auto-activate for the primary FSharp.slnx solution (dotnet build FSharp.slnx). -->
+  <PropertyGroup Condition="'$(SolutionName)' == 'FSharp' and '$(BUILDING_USING_DOTNET)' != 'false'">
+      <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
+  </PropertyGroup>
+
+  <!--
+    Auto-activate for individual project builds (dotnet build src/... or dotnet test tests/...).
+    Triggers when the bootstrap directory exists, meaning the initial bootstrap phase has run.
+    This allows `dotnet build` and `dotnet test` to work without explicit CLI property overrides.
+    Safe: BootstrapArtifactsDir is repo-specific; false positives are impossible in practice.
+  -->
+  <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == '' AND '$(DisableCompilerRedirection)' != 'true' AND Exists('$(BootstrapArtifactsDir)fsc/fsc.dll')">
       <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
   </PropertyGroup>
 
@@ -56,13 +102,12 @@
     <FSHARPCORE_USE_PACKAGE Condition="'$(FSHARPCORE_USE_PACKAGE)' == ''">true</FSHARPCORE_USE_PACKAGE>
 
     <DISABLE_ARCADE Condition="'$(DISABLE_ARCADE)' == ''">true</DISABLE_ARCADE>
-    <ArtifactsDir>$(MSBuildThisFileDirectory)artifacts/</ArtifactsDir>
-    <OutputPath>$(ArtifactsDir)/bin/$(MSBuildProjectName)/$(Configuration)/</OutputPath>
-    <IntermediateOutputPath>$(ArtifactsDir)obj/$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>$(ArtifactsBinDir)$(MSBuildProjectName)/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>$(ArtifactsObjDir)$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
     <!-- Note, that default framework is used here (the one we use for development in the current cycle),
          since it's a non-arcade and non-sourcebuild scenario -->
-    <FsLexPath>$(ArtifactsDir)/bin/fslex/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(RuntimeIdentifier)/fslex.dll</FsLexPath>
-    <FsYaccPath>$(ArtifactsDir)/bin/fsyacc/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(RuntimeIdentifier)/fsyacc.dll</FsYaccPath>
+    <FsLexPath>$(ArtifactsBinDir)fslex/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(RuntimeIdentifier)/fslex.dll</FsLexPath>
+    <FsYaccPath>$(ArtifactsBinDir)fsyacc/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(RuntimeIdentifier)/fsyacc.dll</FsYaccPath>
     <DefineConstants>BUILDING_WITH_LKG;$(DefineConstants)</DefineConstants>
   </PropertyGroup>
 

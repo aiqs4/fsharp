@@ -32,12 +32,12 @@
     <OtherFlags>$(OtherFlags) --warnon:3390</OtherFlags>
 	<!-- 3261: Nullness warning - not equivalent - currently triggers when proto builds source files like Fscomp.fs -->
 	<OtherFlags Condition="'$(Configuration)' == 'Proto'">$(OtherFlags) --nowarn:3261</OtherFlags>
-	  
+
 	<!-- generate IL filter blocks in order to prevent StackOverFlowException in TcExpr guarded with |RecoverableException| active pattern-->
     <OtherFlags>$(OtherFlags) --generate-filter-blocks</OtherFlags>
 	<Tailcalls>true</Tailcalls> <!-- .tail annotations always emitted for this binary, even in debug mode -->
-    <FsYaccOutputFolder>$(IntermediateOutputPath)$(TargetFramework)\</FsYaccOutputFolder>
-    <FsLexOutputFolder>$(IntermediateOutputPath)$(TargetFramework)\</FsLexOutputFolder>
+    <FsYaccOutputFolder>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', '$(TargetFramework)'))</FsYaccOutputFolder>
+    <FsLexOutputFolder>$([MSBuild]::NormalizeDirectory('$(IntermediateOutputPath)', '$(TargetFramework)'))</FsLexOutputFolder>
     <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
     <Configurations>Debug;Release</Configurations>
   </PropertyGroup>
@@ -60,8 +60,8 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == 'true'">
-    <OutputPath>$(ArtifactsDir)/bin/$(MSBuildProjectName)/$(Configuration)/</OutputPath>
-    <IntermediateOutputPath>$(ArtifactsDir)obj/$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
+    <OutputPath>$(ArtifactsBinDir)$(MSBuildProjectName)/$(Configuration)/</OutputPath>
+    <IntermediateOutputPath>$(ArtifactsObjDir)$(MSBuildProjectName)/$(Configuration)/</IntermediateOutputPath>
   </PropertyGroup>
 
   <ItemGroup>
