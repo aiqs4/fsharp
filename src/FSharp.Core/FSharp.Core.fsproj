@@ -36,7 +36,7 @@
     <Configurations>Debug;Release;Proto</Configurations>
   </PropertyGroup>
 
-    <!-- .FSharp.Core always uses the old style initialization mechanism because of SQL CLR requirements -->
+  <!-- .FSharp.Core always uses the old style initialization mechanism because of SQL CLR requirements -->
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' != 'true' and '$(Configuration)' != 'Proto'">
     <OtherFlags>$(OtherFlags) --realsig-</OtherFlags>
   </PropertyGroup>
@@ -282,5 +282,4 @@
       <BuiltProjectOutputGroupKeyOutput Include="$(BuildOutputGroupLocation)\FSharp.Core.xml" />
     </ItemGroup>
   </Target>
-
 </Project>

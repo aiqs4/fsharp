@@ -92,11 +92,11 @@
   </Target>
 
       <!-- SDK targets override -->
-  <PropertyGroup Condition="'$(Configuration)' != 'Proto' AND '$(DisableCompilerRedirection)'!='true' AND Exists('$(ProtoOutputPath)')">
-    <FSharpBuildAssemblyFileOverride>$(ProtoOutputPath)\fsc\FSharp.Build.dll</FSharpBuildAssemblyFileOverride>
-  </PropertyGroup>  
-  <UsingTask TaskName="FSharpEmbedResourceText" AssemblyFile="$(FSharpBuildAssemblyFileOverride)" Override="true" Condition="'$(Configuration)' != 'Proto' AND '$(DisableCompilerRedirection)'!='true' AND Exists('$(ProtoOutputPath)')" />
-  <UsingTask TaskName="FSharpEmbedResXSource" AssemblyFile="$(FSharpBuildAssemblyFileOverride)" Override="true" Condition="'$(Configuration)' != 'Proto' AND '$(DisableCompilerRedirection)'!='true' AND Exists('$(ProtoOutputPath)')" />   
+  <PropertyGroup Condition="'$(Configuration)' != 'Proto' AND '$(DisableCompilerRedirection)'!='true' AND Exists('$(BootstrapArtifactsDir)fsc/FSharp.Build.dll')">
+    <FSharpBuildAssemblyFileOverride>$(BootstrapArtifactsDir)fsc/FSharp.Build.dll</FSharpBuildAssemblyFileOverride>
+  </PropertyGroup>
+  <UsingTask TaskName="FSharpEmbedResourceText" AssemblyFile="$(FSharpBuildAssemblyFileOverride)" Override="true" Condition="'$(Configuration)' != 'Proto' AND '$(DisableCompilerRedirection)'!='true' AND Exists('$(FSharpBuildAssemblyFileOverride)')" />
+  <UsingTask TaskName="FSharpEmbedResXSource" AssemblyFile="$(FSharpBuildAssemblyFileOverride)" Override="true" Condition="'$(Configuration)' != 'Proto' AND '$(DisableCompilerRedirection)'!='true' AND Exists('$(FSharpBuildAssemblyFileOverride)')" />
 
 
   <Target Name="BeforeResGen"

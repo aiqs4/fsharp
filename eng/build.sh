@@ -275,9 +275,9 @@ function BuildSolution {
     bl="/bl:\"$log_dir/Build.binlog\""
   fi
 
-  local projects="$repo_root/FSharp.slnx"
+  local projects="${repo_root%/}/FSharp.slnx"
   if [[ "$product_build" = true ]]; then
-    projects="$repo_root/src/Microsoft.FSharp.Compiler/Microsoft.FSharp.Compiler.fsproj"
+    projects="${repo_root%/}/src/Microsoft.FSharp.Compiler/Microsoft.FSharp.Compiler.fsproj"
   fi
 
   echo "$projects:"

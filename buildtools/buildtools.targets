@@ -20,7 +20,11 @@
           BeforeTargets="CoreCompile">
 
     <PropertyGroup>
-        <FsLexPath Condition="'$(FsLexPath)' == ''">$(ArtifactsDir)\Bootstrap\fslex\fslex.dll</FsLexPath>
+      <!-- Compute an effective Artifacts directory even when BUILDING_USING_DOTNET is false -->
+      <_EffectiveArtifactsDir Condition="'$(ArtifactsDir)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)','..','artifacts'))</_EffectiveArtifactsDir>
+      <_EffectiveArtifactsDir Condition="'$(ArtifactsDir)' != ''">$(ArtifactsDir)</_EffectiveArtifactsDir>
+      <!-- Prefer bootstrapped fslex if one is present (created by build.sh/build.ps1 publish step) -->
+      <FsLexPath Condition="'$(FsLexPath)' == ''">$(_EffectiveArtifactsDir)Bootstrap/fslex/fslex.dll</FsLexPath>
     </PropertyGroup>
 
     <!-- Create the output directory -->
@@ -39,12 +43,16 @@
   <!-- Build FsYacc files. -->
   <Target Name="CallFsYacc"
           Inputs="@(FsYacc)"
-          Outputs="@(FsYacc->'$(FsYaccOutputFolder)%(Filename).fs')"
+          Outputs="@(FsYacc->'$(FsYaccOutputFolder)%(Filename).fs');@(FsYacc->'$(FsYaccOutputFolder)%(Filename).fsi')"
           Condition="'@(FsYacc)'!=''"
           BeforeTargets="CoreCompile">
 
     <PropertyGroup>
-        <FsYaccPath Condition="'$(FsYaccPath)' == ''">$(ArtifactsDir)\Bootstrap\fsyacc\fsyacc.dll</FsYaccPath>
+      <!-- Compute an effective Artifacts directory even when BUILDING_USING_DOTNET is false -->
+      <_EffectiveArtifactsDir Condition="'$(ArtifactsDir)' == ''">$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)','..','artifacts'))</_EffectiveArtifactsDir>
+      <_EffectiveArtifactsDir Condition="'$(ArtifactsDir)' != ''">$(ArtifactsDir)</_EffectiveArtifactsDir>
+      <!-- Prefer bootstrapped fsyacc if one is present (created by build.sh/build.ps1 publish step) -->
+      <FsYaccPath Condition="'$(FsYaccPath)' == ''">$(_EffectiveArtifactsDir)Bootstrap/fsyacc/fsyacc.dll</FsYaccPath>
     </PropertyGroup>
 
     <!-- Create the output directory -->
@@ -58,6 +66,15 @@
       <Output TaskParameter="Include" ItemName="FsGeneratedSource"/>
       <Output TaskParameter="Include" ItemName="FileWrites"/>
     </CreateItem>
+    <CreateItem Include="$(FsYaccOutputFolder)%(FsYacc.Filename).fsi">
+      <Output TaskParameter="Include" ItemName="FileWrites"/>
+    </CreateItem>
   </Target>
+
+  <!-- Register .fsl/.fsy files as build inputs for IDE fast up-to-date checks -->
+  <ItemGroup>
+    <UpToDateCheckInput Include="@(FsLex)" />
+    <UpToDateCheckInput Include="@(FsYacc)" />
+  </ItemGroup>
 
 </Project>
