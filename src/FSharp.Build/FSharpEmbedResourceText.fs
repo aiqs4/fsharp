@@ -3,6 +3,7 @@
 namespace FSharp.Build
 
 open System.IO
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
@@ -571,8 +572,7 @@ open Printf
                         if Array.isEmpty holes then
                             sprintf "    static member %s: unit -> %s" ident returnType
                         else
-                            holes
-                            |> Array.mapi (fun idx holeType -> sprintf "a%i: %s" idx holeType)
+                            parameters
                             |> String.concat " * "
                             |> fun parameters -> sprintf "    static member %s: %s -> %s" ident parameters returnType
 
@@ -655,7 +655,7 @@ open Printf
 
                         let resxItem =
                             let item = TaskItem(resx)
-                            item.SetMetadata("ManifestResourceName", Path.GetFileNameWithoutExtension(resx))
+                            item.SetMetadata("ManifestResourceName", Path.getFileNameWithoutExtension resx |> Option.defaultValue "")
                             item.SetMetadata("SourceDocumentPath", textFile)
                             item :> ITaskItem
 

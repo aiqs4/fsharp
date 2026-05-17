@@ -77,7 +77,7 @@ type GenerateILLinkSubstitutions() =
 
             // Create a file in the intermediate output path
             let outputFileName =
-                Path.Combine(this.IntermediateOutputPath, "ILLink.Substitutions.xml")
+                Path.combine2 this.IntermediateOutputPath "ILLink.Substitutions.xml"
 
             Directory.CreateDirectory(this.IntermediateOutputPath) |> ignore
             File.WriteAllText(outputFileName, xmlContent)

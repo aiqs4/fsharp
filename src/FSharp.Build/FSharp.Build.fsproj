@@ -4,16 +4,15 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFramework>netstandard2.0</TargetFramework>
-    <TargetFrameworks Condition="'$(Configuration)' == 'Proto'">netstandard2.0</TargetFrameworks>
+    <TargetFramework>$(FSharpNetCoreProductTargetFramework)</TargetFramework>
     <AssemblyName>FSharp.Build</AssemblyName>
     <NoWarn>$(NoWarn);75</NoWarn> <!-- InternalCommandLineOption -->
     <AllowCrossTargeting>true</AllowCrossTargeting>
 	<Nullable>enable</Nullable>
     <DefineConstants>$(DefineConstants);LOCALIZATION_FSBUILD</DefineConstants>
-    <NoWarn>$(NoWarn);NU1701;FS0075</NoWarn>
-	<!-- 3261: Nullness warning - not equivalent - currently triggers when proto builds source files like Fscomp.fs -->
-	<OtherFlags Condition="'$(Configuration)' == 'Proto'">$(OtherFlags) --nowarn:3261</OtherFlags>
+    <NoWarn>$(NoWarn);NU1701;FS0075;FS3261</NoWarn>
+	<!-- FS3261: Nullness warnings from System.Xml, exception handling, and legacy BCL types not yet wrapped -->
+	<!-- These will be addressed in Phase 2 with System.Xml and System.Reflection wrappers -->
     <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <LangVersion>9</LangVersion>  <!-- FSharp.Build may run in Visual Studio with older FSharp.Cores so don't use unshipped features -->
     <Configurations>Debug;Release;Proto</Configurations>  <!-- FSharp.Build may run in Visual Studio with older FSharp.Cores so don't use unshipped features -->
@@ -37,6 +36,49 @@
     <EmbeddedText Include="FSBuild.txt" />
     <EmbeddedText Include="..\Compiler\Facilities\UtilsStrings.txt" />
     <Compile Include="..\Compiler\Facilities\CompilerLocation.fs" />
+    <!-- FSharp.Compiler.Interop files must be compiled first, before files that open FSharp.Compiler.Interop -->
+    <Compile Include="..\FSharp.Compiler.Interop\String.fs">
+      <Link>Interop/String.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Path.fs">
+      <Link>Interop/Path.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Directory.fs">
+      <Link>Interop/Directory.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\File.fs">
+      <Link>Interop/File.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Encoding.fs">
+      <Link>Interop/Encoding.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Environment.fs">
+      <Link>Interop/Environment.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Reflection.fs">
+      <Link>Interop/Reflection.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Collections.fs">
+      <Link>Interop/Collections.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Threading.fs">
+      <Link>Interop/Threading.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Tasks.fs">
+      <Link>Interop/Tasks.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Regex.fs">
+      <Link>Interop/Regex.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Interlocked.fs">
+      <Link>Interop/Interlocked.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Stopwatch.fs">
+      <Link>Interop/Stopwatch.fs</Link>
+    </Compile>
+    <Compile Include="..\FSharp.Compiler.Interop\Monitor.fs">
+      <Link>Interop/Monitor.fs</Link>
+    </Compile>
     <Compile Include="FSharpCommandLineBuilder.fs" />
     <Compile Include="Fsc.fs" />
     <Compile Include="Fsi.fs" />
@@ -92,6 +134,12 @@
     <PackageReference Include="System.Security.Cryptography.Xml" Version="$(SystemSecurityCryptographyXmlVersion)" PrivateAssets="all" />
     <PackageReference Include="System.Memory" Version="$(SystemMemoryVersion)" />
     <PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="$(SystemRuntimeCompilerServicesUnsafeVersion)" />
+    <PackageReference Include="Microsoft.Build.Framework" />
+    <PackageReference Include="Microsoft.Build.Tasks.Core" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" />
+    <PackageReference Include="Microsoft.Build.Framework" Version="$(MicrosoftBuildFrameworkVersion)" />
+    <PackageReference Include="Microsoft.Build.Tasks.Core" Version="$(MicrosoftBuildTasksCoreVersion)" />
+    <PackageReference Include="Microsoft.Build.Utilities.Core" Version="$(MicrosoftBuildUtilitiesCoreVersion)" />
   </ItemGroup>
 
 </Project>

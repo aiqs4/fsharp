@@ -7,6 +7,7 @@ open System.IO
 open System.Linq
 open System.Text
 open System.Xml.Linq
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
@@ -164,7 +165,7 @@ module internal {1} =
                             let moduleName =
                                 match item.GetMetadata("GeneratedModuleName") with
                                 | null
-                                | "" -> Path.GetFileNameWithoutExtension(item.ItemSpec)
+                                | "" -> Path.getFileNameWithoutExtension item.ItemSpec |> Option.defaultValue ""
                                 | value -> value
 
                             let generateLegacy = getBooleanMetadata "GenerateLegacyCode" false item
