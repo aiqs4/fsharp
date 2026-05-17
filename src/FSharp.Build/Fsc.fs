@@ -7,6 +7,7 @@ open System.Diagnostics
 open System.Globalization
 open System.IO
 open System.Reflection
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 open Internal.Utilities
@@ -72,15 +73,16 @@ type public Fsc() as this =
     let mutable targetType: string | null = null
 
     let defaultToolPath =
-        let locationOfThisDll =
+        let l =
             try
-                Some(Path.GetDirectoryName(typeof<Fsc>.Assembly.Location))
+                Path.getDirectoryName (typeof<Fsc>.Assembly.Location)
             with _ ->
                 None
 
-        match FSharpEnvironment.BinFolderOfDefaultFSharpCompiler(locationOfThisDll) with
-        | Some s -> s
-        | None -> ""
+        match FSharpEnvironment.BinFolderOfDefaultFSharpCompiler l with
+        | Some s when not (String.isNullOrEmpty s) -> s
+        | _ -> ""
+
 
     let mutable treatWarningsAsErrors: bool = false
     let mutable useStandardResourceNames: bool = false
@@ -704,13 +706,13 @@ type public Fsc() as this =
 
     override _.StandardErrorEncoding =
         if utf8output then
-            System.Text.Encoding.UTF8
+            Encoding.utf8
         else
             base.StandardErrorEncoding
 
     override _.StandardOutputEncoding =
         if utf8output then
-            System.Text.Encoding.UTF8
+            Encoding.utf8
         else
             base.StandardOutputEncoding
 
@@ -718,7 +720,7 @@ type public Fsc() as this =
         if defaultToolPath = "" then
             raise (new System.InvalidOperationException(FSBuild.SR.toolpathUnknown ()))
 
-        System.IO.Path.Combine(defaultToolPath, fsc.ToolExe)
+        Path.combine2 defaultToolPath fsc.ToolExe
 
     override fsc.LogToolCommand(message: string) =
         fsc.Log.LogMessageFromText(message, MessageImportance.Normal) |> ignore
@@ -768,12 +770,19 @@ type public Fsc() as this =
                     with
                     // ok, this is what happens when VS IDE cancels the build, no need to assert, just log the build-canceled error and return -1 to denote task failed
                     // Do a string compare on the type name to do eliminate a compile time dependency on Microsoft.Build.dll
-                    | :? TargetInvocationException as tie when
-                        not (isNull tie.InnerException)
-                        && (tie.InnerException).GetType().FullName = "Microsoft.Build.Exceptions.BuildAbortedException"
-                        ->
-                        fsc.Log.LogError(tie.InnerException.Message, [||])
-                        -1
+                    // | :? TargetInvocationException as tie when 
+                    //     let inner = tie.InnerException 
+                    //     not (isNull inner) && inner.GetType().FullName = "Microsoft.Build.Exceptions.BuildAbortedException" 
+                    //     ->
+                    //     fsc.Log.LogError(inner.Message, [||])
+                    //     -1
+                    | :? TargetInvocationException as tie ->
+                        match tie.InnerException with
+                        | null -> reraise() // Handle the null case explicitly
+                        | inner when not (isNull inner) && inner.GetType().FullName = "Microsoft.Build.Exceptions.BuildAbortedException" ->
+                            fsc.Log.LogError(inner.Message, [||])
+                            -1
+                        | _ -> reraise ()
                     | _ -> reraise ()
 
                 let baseCallDelegate =
@@ -801,7 +810,7 @@ type public Fsc() as this =
 
     override _.GenerateResponseFileCommands() =
         let builder = generateCommandLineBuilder ()
-        builder.GetCapturedArguments() |> String.concat Environment.NewLine
+        builder.GetCapturedArguments() |> FSharp.Core.String.concat Environment.NewLine
 
     // expose this to internal components (for unit testing)
     member internal fsc.InternalGenerateCommandLineCommands() = fsc.GenerateCommandLineCommands()
