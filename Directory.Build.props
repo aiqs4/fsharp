@@ -59,6 +59,21 @@
       <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
   </PropertyGroup>
 
+  <!-- Auto-activate for the primary FSharp.slnx solution (dotnet build FSharp.slnx). -->
+  <PropertyGroup Condition="'$(SolutionName)' == 'FSharp' and '$(BUILDING_USING_DOTNET)' != 'false'">
+      <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
+  </PropertyGroup>
+
+  <!--
+    Auto-activate for individual project builds (dotnet build src/... or dotnet test tests/...).
+    Triggers when the bootstrap directory exists, meaning the initial bootstrap phase has run.
+    This allows `dotnet build` and `dotnet test` to work without explicit CLI property overrides.
+    Safe: BootstrapArtifactsDir is repo-specific; false positives are impossible in practice.
+  -->
+  <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == '' AND '$(DisableCompilerRedirection)' != 'true' AND Exists('$(BootstrapArtifactsDir)fsc/fsc.dll')">
+      <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>
+  </PropertyGroup>
+
   <!-- Temporary workaround if proj-info is used, allows Ionide's evaluation to work correctly. -->
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' != 'false' and '$(DotnetProjInfo)' == 'true'">
       <BUILDING_USING_DOTNET>true</BUILDING_USING_DOTNET>

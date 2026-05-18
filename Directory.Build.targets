@@ -13,10 +13,17 @@
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' == 'true'">
-    <!-- Note, that default framework is used here (the one we use for development in the current cycle),
-         since it's a non-arcade and non-sourcebuild scenario -->
-    <FsLexPath>$(ArtifactsDir)/bin/fslex/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(NETCoreSdkPortableRuntimeIdentifier)/fslex.dll</FsLexPath>
-    <FsYaccPath>$(ArtifactsDir)/bin/fsyacc/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(NETCoreSdkPortableRuntimeIdentifier)/fsyacc.dll</FsYaccPath>
+    <!--
+      Bootstrap tools take priority over just-built release artifacts.
+      Release-built fslex/fsyacc crash (SIGABRT / exit 134) when FSharp.Core is still
+      compiling in parallel — they were compiled against the in-dev FSharp.Core.
+      Bootstrap tools use the shipped FSharp.Core and are always stable.
+      CLI overrides (/p:FsLexPath=...) still take precedence over these property assignments.
+    -->
+    <FsLexPath Condition="Exists('$(BootstrapArtifactsDir)fslex/fslex.dll')">$(BootstrapArtifactsDir)fslex/fslex.dll</FsLexPath>
+    <FsLexPath Condition="'$(FsLexPath)' == ''">$(ArtifactsBinDir)fslex/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(NETCoreSdkPortableRuntimeIdentifier)/fslex.dll</FsLexPath>
+    <FsYaccPath Condition="Exists('$(BootstrapArtifactsDir)fsyacc/fsyacc.dll')">$(BootstrapArtifactsDir)fsyacc/fsyacc.dll</FsYaccPath>
+    <FsYaccPath Condition="'$(FsYaccPath)' == ''">$(ArtifactsBinDir)fsyacc/$(Configuration)/$(FSharpNetCoreProductTargetFramework)/$(NETCoreSdkPortableRuntimeIdentifier)/fsyacc.dll</FsYaccPath>
   </PropertyGroup>
 
   <ItemGroup Condition="'$(DesignTimeBuild)' == 'true'">
@@ -28,15 +35,15 @@
   </ItemGroup>
 
   <!-- We want to restore ALL the MIBCs when we build anything, since in the future it will contain different profiles, not only the FSC one we got from building Giraffe -->
-  <Import Project="$(MSBuildThisFileDirectory)\eng\restore\optimizationData.targets"/>
+  <Import Project="$(MSBuildThisFileDirectory)eng/restore/optimizationData.targets" Condition="'$(IgnoreMibc)' != 'true'"/>
   <ItemGroup>
     <PackageReference Include="@(MIBCPackage)" />
   </ItemGroup>
 
   <Target Name="CopyMIBCWrapper" AfterTargets="Restore" BeforeTargets="Build;Pack">
     <MSBuild
-      Projects="$(MSBuildThisFileDirectory)eng\restore\optimizationData.targets"
-      Properties="ArtifactsDir=$(MSBuildThisFileDirectory)artifacts\;NuGetPackageRoot=$(NuGetPackageRoot);MibcFiles=$(MibcFiles);optimizationwindows_ntx86MIBCRuntimeVersion=$(optimizationwindows_ntx86MIBCRuntimeVersion);optimizationwindows_ntx64MIBCRuntimeVersion=$(optimizationwindows_ntx64MIBCRuntimeVersion);optimizationwindows_ntarm64MIBCRuntimeVersion=$(optimizationwindows_ntarm64MIBCRuntimeVersion);optimizationlinuxx64MIBCRuntimeVersion=$(optimizationlinuxx64MIBCRuntimeVersion);optimizationlinuxarm64MIBCRuntimeVersion=$(optimizationlinuxarm64MIBCRuntimeVersion)"
+      Projects="$(MSBuildThisFileDirectory)eng/restore/optimizationData.targets"
+      Properties="ArtifactsDir=$(ArtifactsDir);NuGetPackageRoot=$(NuGetPackageRoot);MibcFiles=$(MibcFiles);optimizationwindows_ntx86MIBCRuntimeVersion=$(optimizationwindows_ntx86MIBCRuntimeVersion);optimizationwindows_ntx64MIBCRuntimeVersion=$(optimizationwindows_ntx64MIBCRuntimeVersion);optimizationwindows_ntarm64MIBCRuntimeVersion=$(optimizationwindows_ntarm64MIBCRuntimeVersion);optimizationlinuxx64MIBCRuntimeVersion=$(optimizationlinuxx64MIBCRuntimeVersion);optimizationlinuxarm64MIBCRuntimeVersion=$(optimizationlinuxarm64MIBCRuntimeVersion)"
       Targets="CopyMIBC"
       RemoveProperties="TargetFramework"
       StopOnFirstFailure="True" />
