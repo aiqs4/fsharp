@@ -18,7 +18,7 @@
     <PreReleaseVersionLabel>preview$(FSharpPreReleaseIteration)</PreReleaseVersionLabel>
     <!-- F# Version components -->
     <FSMajorVersion>10</FSMajorVersion>
-    <FSMinorVersion>0</FSMinorVersion>
+    <FSMinorVersion>1</FSMinorVersion>
     <FSBuildVersion>300</FSBuildVersion>
     <FSRevisionVersion>0</FSRevisionVersion>
     <!-- -->
@@ -32,7 +32,7 @@
     <FSCorePackageVersionValue>$(FSMajorVersion).$(FSMinorVersion).$(FSBuildVersion)</FSCorePackageVersionValue>
     <FSCoreVersionPrefix>$(FSMajorVersion).$(FSMinorVersion).$(FSBuildVersion)</FSCoreVersionPrefix>
     <FSCoreVersion>$(FSMajorVersion).$(FSMinorVersion).0.0</FSCoreVersion>
-    <FSCoreShippedVersion>10.0.300.0</FSCoreShippedVersion>
+    <FSCoreShippedVersion>10.1.300.0</FSCoreShippedVersion>
     <!-- Reset FSMinorVersion for non-FSharp.Core uses -->
     <FSMinorVersion Condition="'$(FSMajorVersion)' == '10'">0</FSMinorVersion>
     <!-- -->
