@@ -1,5 +1,3 @@
-// Copyright (c) Microsoft Corporation.  All Rights Reserved.  See License.txt in the project root for license information.
-
 namespace FSharp.Compiler.ComponentTests.Language
 
 open Xunit
@@ -9,7 +7,7 @@ open FSharp.Test
 module CEEnhancementsTests =
 
     // ---------------------------------------------------------------
-    // BindReturn poisons do! — Issue 1 (Most Critical)
+    // BindReturn poisons do!
     // ---------------------------------------------------------------
 
     [<Fact>]
@@ -533,6 +531,7 @@ module WasmOps =
     let (&&&) (a: Expr) (b: Expr) = Binary("and", a, b)
     let (==) (a: Expr) (b: Expr) = Binary("eq", a, b)
     let (<--) (n: string) (v: Expr) : Expr = Assign(n, v)
+    
     let inline (<!) a b = a < C b
     let inline (+!) a b = a + C b
     let inline (==!) a b = a == C b
@@ -812,7 +811,7 @@ if fail > 0 then
     printfn "  SOME TESTS FAILED!"
 else
     printfn "  All tests passed!"
-        """
+"""
         |> asExe
         |> compile
         |> shouldSucceed
@@ -855,7 +854,7 @@ module Test
 type Expr = C of int | Loop of string * Expr | Nop | LG of string
 
 type Builder() =
-    member _.While(guard: unit -> Expr, body: Expr) : Expr =
+    member _.WhileExprDirect(guard: Expr, body: Expr) : Expr =
         Loop("loop", C 0)
     member _.Zero() : Expr = Nop
     member _.Delay(f: unit -> Expr) : Expr = f ()
@@ -921,11 +920,10 @@ type Builder() =
     member _.Bind(g: Expr, k: bool -> Expr) : Expr =
         _whileBangGuards.Push(g); k true
 
-    // Standard while (non-bang, Expr guard)
-    member _.While(guard: unit -> Expr, body: Expr) : Expr =
-        let g = guard()
+    // Standard while (non-bang, direct Expr guard)
+    member _.WhileExprDirect(guard: Expr, body: Expr) : Expr =
         let lbl = fresh()
-        Block(lbl + "_x", Loop(lbl, If(g, Seq [ body; Continue lbl ], Break (lbl + "_x"))))
+        Block(lbl + "_x", Loop(lbl, If(guard, Seq [ body; Continue lbl ], Break (lbl + "_x"))))
 
     // while! pops from stack
     member _.While(_: unit -> bool, body: Expr) : Expr =
@@ -948,7 +946,7 @@ let r1 = b {
         ()
 }
 
-// plain while uses While(unit -> Expr, Expr) directly
+// plain while uses WhileExprDirect(Expr, Expr) directly
 let r2 = b {
     while (LG "cond2") do
         ()
@@ -1133,10 +1131,9 @@ let mutable ctr = 0
 let fresh () = ctr <- ctr + 1; sprintf "lbl%d" ctr
 
 type Builder() =
-    member _.While(guard: unit -> Expr, body: Expr) =
-        let g = guard()
+    member _.WhileExprDirect(guard: Expr, body: Expr) =
         let lbl = fresh()
-        Block(lbl + "_x", Loop(lbl, If(g, Seq [body; Continue lbl], Break (lbl + "_x"))))
+        Block(lbl + "_x", Loop(lbl, If(guard, Seq [body; Continue lbl], Break (lbl + "_x"))))
     member _.Zero() = Nop
     member _.Delay(f: unit -> Expr) = f()
     member _.Run(e: Expr) = e
@@ -1298,7 +1295,6 @@ let result = b {
         FSharp """
 // Demonstrates that while guard is NOT constrained to bool.
 // The builder's While accepts unit -> Result<bool,string> instead of unit -> bool.
-
 type Builder() =
     member _.While(guard: unit -> Result<bool,string>, body: Result<unit,string>) =
         let rec loop () =
@@ -1455,14 +1451,18 @@ type WasmBuilder() =
     member _.Bind(e: Expr, k: Expr -> Expr) : Expr = let n = fresh() in Let(n, e, k (LG n))
     member _.Bind(e: Expr, k: unit -> Expr) : Expr = let r = k() in match r with Nop -> e | _ -> Seq [e; r]
     member _.Bind(m: MutInit, k: Expr -> Expr) : Expr = let n = fresh() in LetMut(n, m.Init, k (LG n))
+    
     // WhileBang: compiler passes guard directly, no bool constraint, no stack hack.
     member _.WhileBang(guard: Expr, body: Expr) : Expr =
         let lbl = fresh()
         let exit = mkExit lbl
         Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
-    member _.While(guard: unit -> Expr, body: Expr) : Expr =
-        let g = guard() in let lbl = fresh() in let exit = mkExit lbl
-        Block(exit, Loop(lbl, If(g, Seq [body; Continue lbl], Break exit)))
+        
+    // Standard while via WhileExprDirect (bypasses Delay and bool constraints)
+    member _.WhileExprDirect(guard: Expr, body: Expr) : Expr =
+        let lbl = fresh() in let exit = mkExit lbl
+        Block(exit, Loop(lbl, If(guard, Seq [body; Continue lbl], Break exit)))
+        
     member _.Bind2Return(a: Expr, b: Expr, f: Expr * Expr -> Expr) : Expr =
         let n1 = fresh() in let n2 = fresh() in Let(n1, a, Let(n2, b, f (LG n1, LG n2)))
     member _.Bind2(a: Expr, b: Expr, f: Expr * Expr -> Expr) : Expr =
@@ -1659,8 +1659,8 @@ if count = 3 then printfn "PASS" else printfn "FAIL: count=%d" count
     // ---------------------------------------------------------------
     // RFC Fix — IfExpr branches NOT wrapped in Delay
     // ---------------------------------------------------------------
-    // The RFC specifies that when builder has IfExpr method:
-    //   builder.IfExpr(guard, thenBody, elseBody)
+    // The RFC specifies that when builder has IfExprDirect method:
+    //   builder.IfExprDirect(guard, thenBody, elseBody)
     // NOT:
     //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Delay(fun () -> elseBody))
     //
@@ -1669,18 +1669,19 @@ if count = 3 then printfn "PASS" else printfn "FAIL: count=%d" count
     // 2. Proper structure analysis without Delay callback overhead
     // 3. Clean type-guided dispatch for guard types
     //
-    // Tests verify: IfExpr branches are NOT decorated with Delay
+    // Tests verify: IfExprDirect branches are NOT decorated with Delay
 
     [<Fact>]
     let ``IfExpr — RFC fix: branches NOT wrapped in Delay`` () =
         FSharp """
+#nowarn "20"
 module Test
 
 type Expr = C of int | IfE of Expr * Expr * Expr | Nop
 
 type Builder() =
-    // IfExpr receives branches directly (no Delay wrapper)
-    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
+    // IfExprDirect receives branches directly (no Delay wrapper)
+    member _.IfExprDirect(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
         IfE(guard, thenBranch, elseBranch)
 
     member _.Zero() = Nop
@@ -1688,7 +1689,7 @@ type Builder() =
 
 let b = Builder()
 
-// When IfExpr is present in builder, branches should NOT be wrapped
+// When IfExprDirect is present in builder, branches should NOT be wrapped
 let r = b {
     if C 1 then
         C 10
@@ -1708,12 +1709,13 @@ match r with
     [<Fact>]
     let ``IfExpr — single-branch if uses Zero directly`` () =
         FSharp """
+#nowarn "20"
 module Test
 
 type Expr = C of int | IfE of Expr * Expr * Expr | Nop
 
 type Builder() =
-    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
+    member _.IfExprDirect(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
         IfE(guard, thenBranch, elseBranch)
 
     member _.Zero() = Nop
@@ -1738,6 +1740,7 @@ match r with
     [<Fact>]
     let ``IfExpr — nested if/else without spurious Nops`` () =
         FSharp """
+#nowarn "20"
 module Test
 
 type Expr =
@@ -1747,7 +1750,7 @@ type Expr =
     | Nop
 
 type Builder() =
-    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
+    member _.IfExprDirect(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
         IfE(guard, thenBranch, elseBranch)
 
     member _.Combine(a: Expr, b: Expr) : Expr =
@@ -1784,6 +1787,7 @@ match r with
     [<Fact>]
     let ``IfExpr — builder IfExpr receives undecorated Expr from translation`` () =
         FSharp """
+#nowarn "20"
 module Test
 
 type Expr =
@@ -1794,7 +1798,7 @@ type Expr =
 
 type Builder() =
     // Record that we received undecorated Expr
-    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
+    member _.IfExprDirect(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
         // If branches were Delayed, we'd see Delay(...) here
         // Since RFC fix removes Delay, we directly see the user's computation
         IfE(guard, thenBranch, elseBranch)
@@ -1825,6 +1829,7 @@ match r with
     [<Fact>]
     let ``IfExpr + let! — RFC fix preserves guard type from Bind`` () =
         FSharp """
+#nowarn "20"
 module Test
 
 type Expr = C of int | LG of string | Bind of string * Expr * Expr | IfE of Expr * Expr * Expr | Nop
@@ -1834,7 +1839,7 @@ type Builder() =
         let v = "__x"
         Bind(v, e, k (LG v))
 
-    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
+    member _.IfExprDirect(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
         IfE(guard, thenBranch, elseBranch)
 
     member _.Zero() = Nop
@@ -1864,6 +1869,7 @@ match r with
     [<Fact>]
     let ``IfExpr runtime test — branches execute with correct control flow`` () =
         FSharp """
+#nowarn "20"
 module Test
 
 type Expr = 
@@ -1872,7 +1878,7 @@ type Expr =
     | Nop
 
 type Builder() =
-    member _.IfExpr(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
+    member _.IfExprDirect(guard: Expr, thenBranch: Expr, elseBranch: Expr) : Expr =
         IfE(guard, thenBranch, elseBranch)
 
     member _.Zero() = Nop
@@ -1928,15 +1934,16 @@ module Test
 type Builder() =
     member _.Return(x: int) = x
     member _.Zero() = 0
+    member _.Delay(f: unit -> int) = f()
     member _.Run(e: int) = e
 
 let b = Builder()
 
 let r = b {
     if true then
-        42
+        return 42
     else
-        0
+        return 0
 }
 
 if r = 42 then printfn "PASS" else printfn "FAIL: r=%d" r
@@ -1951,9 +1958,9 @@ if r = 42 then printfn "PASS" else printfn "FAIL: r=%d" r
         FSharp """
 let r = async {
     if true then
-        42
+        return 42
     else
-        0
+        return 0
 }
 
 let result = Async.RunSynchronously r

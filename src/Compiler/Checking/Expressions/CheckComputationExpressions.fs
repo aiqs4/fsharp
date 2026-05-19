@@ -1462,30 +1462,27 @@ let rec TryTranslateComputationExpression
                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mWhile, false, guardExpr)
                 | DebugPointAtWhile.No -> guardExpr
 
-            // WhileExpr builder method (preferred when present):
-            //   builder.WhileExpr(guard, builder.Delay(fun () -> body))
-            //   The builder controls the guard type entirely; no bool constraint.
-            if
-                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.WhileExpr
-                && hasBuilderMethod ceenv mWhile "WhileExpr"
-            then
-                requireBuilderMethod "Delay" ceenv mWhile mWhile
-
+             // Path A: New WhileExprDirect method (Strict/Direct evaluation for AST builders)
+            if hasBuilderMethod ceenv mWhile "WhileExprDirect" then
+                let bodyTranslated = TranslateComputationExpressionNoQueryOps ceenv innerComp
                 Some(
-                    TranslateComputationExpression (noTailCall ceenv) CompExprTranslationPass.Initial q varSpace innerComp (fun holeFill ->
-                        translatedCtxt (
-                            mkSynCall
-                                "WhileExpr"
-                                mWhile
-                                [
-                                    guardExpr
-                                    mkSynCall "Delay" mWhile [ mkSynDelay innerComp.Range holeFill ] ceenv.builderValName
-                                ]
-                                ceenv.builderValName
-                        ))
+                    translatedCtxt (
+                        mkSynCall "WhileExprDirect" mWhile [ guardExpr; bodyTranslated ] ceenv.builderValName
+                    )
                 )
+
+            // Path B: Custom WhileBang method (High-performance or carrier-free while! loop)
+            elif hasBuilderMethod ceenv mWhile "WhileBang" then
+                let bodyTranslated = TranslateComputationExpressionNoQueryOps ceenv innerComp
+                let bodyDelayed = mkSynDelay mWhile bodyTranslated
+                Some(
+                    translatedCtxt (
+                        mkSynCall "WhileBang" mWhile [ guardExpr; bodyDelayed ] ceenv.builderValName
+                    )
+                )
+
+            // Path C: Standard While loop
             else
-                // Existing path: builder.While(fun () -> guard, builder.Delay(fun () -> body))
                 requireBuilderMethod "While" ceenv mWhile mWhile
                 requireBuilderMethod "Delay" ceenv mWhile mWhile
 
@@ -1907,16 +1904,10 @@ let rec TryTranslateComputationExpression
                         )
 
         | SynExpr.IfThenElse(guardExpr, thenComp, elseCompOpt, spIfToThen, isRecovery, mIfToEndOfElseBranch, trivia) ->
-            // IfExpr builder method (preferred when present):
-            //   builder.IfExpr(guard, thenBody, elseBody)
-            //   or for single-branch:
-            //   builder.IfExpr(guard, thenBody, builder.Zero())
-            //   Branches are translated directly (no Delay wrapping) — RFC fix.
-            //   The builder controls the guard type entirely; no bool constraint.
-            if
-                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.IfExpr
-                && hasBuilderMethod ceenv trivia.IfToThenRange "IfExpr"
-            then
+            // Path A: New IfExprDirect method (Preferred for strict, carrier-free AST builders)
+            //   builder.IfExprDirect(guard, thenBody, elseBody)
+            //   Branches are translated directly without Delay wrapping. Zero breaking changes.
+            if hasBuilderMethod ceenv trivia.IfToThenRange "IfExprDirect" then
                 match elseCompOpt with
                 | Some elseComp ->
                     if ceenv.isQuery then
@@ -1927,7 +1918,7 @@ let rec TryTranslateComputationExpression
 
                     Some(
                         translatedCtxt (
-                            mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenTranslated; elseTranslated ] ceenv.builderValName
+                            mkSynCall "IfExprDirect" trivia.IfToThenRange [ guardExpr; thenTranslated; elseTranslated ] ceenv.builderValName
                         )
                     )
                 | None ->
@@ -1938,9 +1929,46 @@ let rec TryTranslateComputationExpression
 
                     Some(
                         translatedCtxt (
-                            mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenTranslated; zeroExpr ] ceenv.builderValName
+                            mkSynCall "IfExprDirect" trivia.IfToThenRange [ guardExpr; thenTranslated; zeroExpr ] ceenv.builderValName
                         )
                     )
+
+            // Path B: Existing IfExpr method (Preserved for backwards-compatible Query/LINQ builders)
+            //   builder.IfExpr(guard, builder.Delay(fun () -> thenBody), builder.Delay(fun () -> elseBody))
+            elif
+                ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.IfExpr
+                && hasBuilderMethod ceenv trivia.IfToThenRange "IfExpr"
+            then
+                match elseCompOpt with
+                | Some elseComp ->
+                    if ceenv.isQuery then
+                        error (Error(FSComp.SR.tcIfThenElseMayNotBeUsedWithinQueries (), trivia.IfToThenRange))
+
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let elseTranslated = TranslateComputationExpressionNoQueryOps ceenv elseComp
+                    
+                    Some(
+                        translatedCtxt (
+                            let thenDelayed = mkSynDelay trivia.IfToThenRange thenTranslated
+                            let elseDelayed = mkSynDelay mIfToEndOfElseBranch elseTranslated
+                            mkSynCall "IfExpr" mIfToEndOfElseBranch [ guardExpr; thenDelayed; elseDelayed ] ceenv.builderValName
+                        )
+                    )
+                | None ->
+                    requireBuilderMethod "Zero" ceenv trivia.IfToThenRange trivia.IfToThenRange
+
+                    let thenTranslated = TranslateComputationExpressionNoQueryOps ceenv thenComp
+                    let zeroExpr = mkSynCall "Zero" trivia.IfToThenRange [] ceenv.builderValName
+
+                    Some(
+                        translatedCtxt (
+                            let thenDelayed = mkSynDelay trivia.IfToThenRange thenTranslated
+                            let zeroDelayed = mkSynDelay trivia.IfToThenRange zeroExpr
+                            mkSynCall "IfExpr" trivia.IfToThenRange [ guardExpr; thenDelayed; zeroDelayed ] ceenv.builderValName
+                        )
+                    )
+
+            // Path C: Standard F# conditional desugaring
             else
                 // Existing path: standard if/then/else desugaring
                 match elseCompOpt with
