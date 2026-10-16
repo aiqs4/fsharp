@@ -9,6 +9,8 @@
     <TargetFrameworks Condition="'$(Configuration)' != 'Proto'">netstandard2.0;netstandard2.1;$(FSharpCoreShippedNetTargetFramework)</TargetFrameworks>
     <!-- Support net10.0 with strict null checking PLUS legacy frameworks for compatibility -->
     <TargetFrameworks>net10.0</TargetFrameworks>
+    <TargetFrameworks>$(FSharpCoreShippedNetTargetFramework)</TargetFrameworks>
+    <TargetFrameworks>$(FSharpNetCoreProductTargetFramework)</TargetFrameworks>
     <NoWarn>$(NoWarn);75</NoWarn> <!-- InternalCommandLineOption -->
     <NoWarn>$(NoWarn);1204</NoWarn> <!-- This construct is for use in the FSharp.Core library and should not be used directly -->
     <AllowCrossTargeting>true</AllowCrossTargeting>

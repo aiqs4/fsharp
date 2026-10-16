@@ -8,7 +8,7 @@ set folders \
     # src/FSharp.Core
 
 # 2. Zieldatei definieren
-set output_file "combined_projects.txt"
+set output_file "AI_UPLOAD/combined_projects.txt"
 
 # Liste der auszu schließenden Ordnernamen (getrennt durch Pipe |)
 set exclude_pattern "(/bin/|/obj/|docs/|/node_modules/|artifact.*/|.dotnet.*/)"

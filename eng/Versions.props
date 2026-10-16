@@ -32,7 +32,7 @@
     <FSCorePackageVersionValue>$(FSMajorVersion).$(FSMinorVersion).$(FSBuildVersion)</FSCorePackageVersionValue>
     <FSCoreVersionPrefix>$(FSMajorVersion).$(FSMinorVersion).$(FSBuildVersion)</FSCoreVersionPrefix>
     <FSCoreVersion>$(FSMajorVersion).$(FSMinorVersion).0.0</FSCoreVersion>
-    <FSCoreShippedVersion>10.0.101.0</FSCoreShippedVersion>
+    <FSCoreShippedVersion>11.0.100.0</FSCoreShippedVersion>
     <!-- Reset FSMinorVersion for non-FSharp.Core uses -->
     <FSMinorVersion Condition="'$(FSMajorVersion)' == '10'">0</FSMinorVersion>
     <!-- -->
@@ -46,7 +46,7 @@
     <FSharpLibrariesChangelogVersion>$(FSMajorVersion).$(FSMinorVersion).$(FSBuildVersion)</FSharpLibrariesChangelogVersion>
     <!-- -->
     <!-- The current published nuget package -->
-    <FSharpCoreShippedPackageVersionValue>10.0.101</FSharpCoreShippedPackageVersionValue>
+    <FSharpCoreShippedPackageVersionValue>11.0.100</FSharpCoreShippedPackageVersionValue>
     <!-- -->
     <!-- The pattern for specifying the preview package -->
     <FSharpCorePreviewPackageVersionValue>$(FSCorePackageVersionValue)-$(PreReleaseVersionLabel).*</FSharpCorePreviewPackageVersionValue>

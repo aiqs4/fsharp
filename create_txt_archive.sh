@@ -10,7 +10,7 @@ set folders \
     # src/FSharp.Core
 
 # 2. Zieldatei definieren
-set output_file "combined_code.txt"
+set output_file "AI_UPLOAD/combined_code.txt"
 
 # Bestehende alte Datei löschen
 rm -f $output_file

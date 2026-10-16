@@ -15,6 +15,11 @@
     <FcsProjectPath Condition="'$(FcsProjectPath)' == ''">..\..\..\..\src\Compiler\FSharp.Compiler.Service.fsproj</FcsProjectPath>
   </PropertyGroup>
 
+  <PropertyGroup Condition="'$(OS)' != 'Windows_NT'">
+    <OtherFlags>$(OtherFlags) --nowin32manifest</OtherFlags>
+    <NoWin32Manifest>true</NoWin32Manifest>
+  </PropertyGroup>
+
   <ItemGroup>
     <Compile Include="Helpers.fs" />
     <Compile Include="SingleFileCompiler.fs" />

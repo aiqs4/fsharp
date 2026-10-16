@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>netstandard2.0</TargetFramework>
+		<TargetFramework>net11.0</TargetFramework>
 		<DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
 		<OtherFlags>$(OtherFlags) --nowarn:3390 --nowarn:3218</OtherFlags>
 	</PropertyGroup>
@@ -16,7 +16,7 @@
 		<ProjectReference Include="..\TestProject\TestProject.fsproj" />
 		<ProjectReference Include="..\CSharp_Analysis\CSharp_Analysis.csproj" />
 		<Reference Include="TestTP">
-			<HintPath>..\..\..\..\artifacts\bin\TestTP\$(Configuration)\netstandard2.0\TestTP.dll</HintPath>
+			<HintPath>..\..\..\..\artifacts\bin\TestTP\$(Configuration)\net11.0\TestTP.dll</HintPath>
 		</Reference>
 	</ItemGroup>
 
