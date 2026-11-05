@@ -469,7 +469,7 @@ namespace Microsoft.FSharp.Core
     open System.Collections.Generic
     open System.Globalization
     open System.Reflection
-    #endif
+    // #endif
 
     [<MeasureAnnotatedAbbreviation>] type float<[<Measure>] 'Measure> = float 
     [<MeasureAnnotatedAbbreviation>] type float32<[<Measure>] 'Measure> = float32
@@ -4133,6 +4133,7 @@ namespace System.Runtime.CompilerServices
     [<AttributeUsage(AttributeTargets.Parameter, AllowMultiple = false, Inherited = false)>]
     type internal ScopedRefAttribute () =
         inherit Attribute ()
+#endif
 
 namespace Microsoft.FSharp.Collections
 

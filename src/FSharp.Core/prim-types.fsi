@@ -2658,6 +2658,7 @@ namespace System.Runtime.CompilerServices
     type internal ScopedRefAttribute =
         inherit Attribute
         new: unit -> ScopedRefAttribute
+#endif
 
 namespace Microsoft.FSharp.Collections
 

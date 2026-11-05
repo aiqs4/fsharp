@@ -59,6 +59,6 @@
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <ItemGroup Condition="'$(LoadLocalFSharpBuild)' == 'True' and '$(RegressionLocalCore)' != 'true'">
-    <Reference Include="$(LocalFSharpCompilerPath)/artifacts/bin/FSharp.Core/$(LocalFSharpCompilerConfiguration)/net11.0/FSharp.Core.dll" />
+    <Reference Include="$(LocalFSharpCompilerPath)/artifacts/bin/FSharp.Core/$(LocalFSharpCompilerConfiguration)/net10.0/FSharp.Core.dll" />
   </ItemGroup>
 </Project>

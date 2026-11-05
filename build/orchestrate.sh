@@ -53,7 +53,7 @@ export DOTNET_CLI_TELEMETRY_OPTOUT=1
 if [[ -z "$TARGET_FRAMEWORK" ]]; then
   TARGET_FRAMEWORK="$(dotnet msbuild "$REPO_ROOT/eng/TargetFrameworks.props" \
       -getProperty:FSharpNetCoreProductTargetFramework 2>/dev/null | tr -d '[:space:]' || true)"
-  TARGET_FRAMEWORK="${TARGET_FRAMEWORK:-net11.0}"
+  TARGET_FRAMEWORK="${TARGET_FRAMEWORK:-net10.0}"
 fi
 
 # ── MSBuild property sets ─────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ step_verify_compiler() {
   # FSharp.Core is built for netstandard2.1 (shipped) — not for the product TFM.
   local -a required=(
     "$ARTIFACTS/bin/fsc/$CONFIGURATION/$TARGET_FRAMEWORK/fsc.dll"
-    "$ARTIFACTS/bin/FSharp.Core/$CONFIGURATION/net11.0/FSharp.Core.dll"
+    "$ARTIFACTS/bin/FSharp.Core/$CONFIGURATION/net10.0/FSharp.Core.dll"
   )
   for f in "${required[@]}"; do
     [[ -e "$f" ]] || error "Compiler output missing: $f"

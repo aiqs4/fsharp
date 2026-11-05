@@ -5,7 +5,7 @@
 
   <!-- Disable R2R when building source-only and not targeting the current SDK bundled TFM. -->
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
+    <TargetFramework>$(FSharpNetCoreProductTargetFramework)</TargetFramework>
     <PublishReadyToRun Condition="'$(DotNetBuildSourceOnly)' == 'true' and
       '$(TargetFrameworkIdentifier)' == '.NETCoreApp' and
       '$(TargetFrameworkVersion)' != ''

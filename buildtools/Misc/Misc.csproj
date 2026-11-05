@@ -5,7 +5,7 @@
        Referenced from multiple .slnx solutions. -->
 
   <PropertyGroup>
-    <TargetFramework>net11.0</TargetFramework>
+    <TargetFramework>$(FSharpNetCoreProductTargetFramework)</TargetFramework>
     <IsPackable>false</IsPackable>
     <DisableImplicitNamespaceImports>true</DisableImplicitNamespaceImports>
     <EnableDefaultNoneItems>false</EnableDefaultNoneItems>

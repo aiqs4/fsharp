@@ -2,7 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
 	<PropertyGroup>
-		<TargetFramework>net11.0</TargetFramework>
+		<TargetFramework>$(FSharpNetCoreProductTargetFramework)</TargetFramework>
 		<DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
 		<OtherFlags>$(OtherFlags) --nowarn:3390 --nowarn:3218</OtherFlags>
     <OutputPath>.\</OutputPath>
