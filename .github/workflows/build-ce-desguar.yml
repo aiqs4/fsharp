@@ -31,6 +31,12 @@ jobs:
         with:
           determinate: false
 
+
+      # FSharp.Build.UnitTests/NuGet.Config uses artifacts/ as a local NuGet feed.
+      # Ensure the source exists before solution restore runs.
+      - name: Prepare local NuGet feed directory
+        run: mkdir -p artifacts
+
       - name: Build compiler and NuGet packages
         shell: bash
         run: |
