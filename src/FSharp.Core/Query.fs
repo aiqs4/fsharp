@@ -108,7 +108,7 @@ type QueryBuilder() =
         Enumerable.First source.Source
 
     member _.Nth (source: QuerySource<'T, 'Q>, index) =
-        1.ElementAt (source.Source, index)
+        Enumerable.ElementAt (source.Source, index)
 
     // member _.Nth (source: QuerySource<'T, 'Q>, index: System.Index) =
     //     Enumerable.ElementAt (source.Source, index)
