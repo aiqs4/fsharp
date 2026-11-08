@@ -1,0 +1,51 @@
+name: F# CE Desugar Build
+
+on:
+  push:
+    branches:
+      - features/ce-desugar
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build F# compiler
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      # determinate-nix-action@v3 forces Determinate Nix and a FlakeHub login.
+      # That login fails (determinate-nixd / git exit 128) and still writes a
+      # bad token into nix.conf, so the next `nix develop` cannot fetch inputs.
+      # Upstream Nix with determinate: false keeps GITHUB_TOKEN for GitHub fetches.
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@9383ce2bf08796b65508822f5982f49151badc4e
+        with:
+          determinate: false
+
+      - name: Build compiler and NuGet packages
+        shell: bash
+        run: |
+          nix develop .#ci --command bash -euo pipefail -c '
+            dotnet --info
+            ./build.sh --publish
+          '
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: fsharp-ce-desugar-${{ github.sha }}
+          path: |
+            artifacts/nupkg/*.nupkg
+            artifacts/bin/**/*.dll
+            artifacts/release/**
+          if-no-files-found: error
+          retention-days: 14
