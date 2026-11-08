@@ -31,12 +31,17 @@ jobs:
         with:
           determinate: false
 
+      # FSharp.Build.UnitTests/NuGet.Config declares artifacts/ as a local feed.
+      # The custom build does not initialize the Arcade artifacts tree before restore.
+      - name: Prepare local NuGet feed directory
+        run: mkdir -p artifacts
+
       - name: Build compiler and NuGet packages
         shell: bash
         run: |
           nix develop .#ci --command bash -euo pipefail -c '
             dotnet --info
-            ./build.sh --publish
+            ./build/build.sh --publish -f
           '
 
       - name: Upload build artifacts
