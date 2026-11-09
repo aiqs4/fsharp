@@ -1524,7 +1524,6 @@ let rec TryTranslateComputationExpression
                 | DebugPointAtWhile.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes(false, mWhile), false, guardExpr)
                 | DebugPointAtWhile.No -> guardExpr
 
-            // TODO: check with upstream !!! there was some change on rebase
             // while! desugaring follows the builder method dispatch principle:
             //
             // Path 1 — WhileBang builder method (preferred):
@@ -1567,8 +1566,9 @@ let rec TryTranslateComputationExpression
                 let idLoop = mkSynId mGuard (CompilerGeneratedName "whileLoop")
                 let idRes = mkSynId mGuard (CompilerGeneratedName "res")
 
-                    let binding =
-                        mkSynLetBangBinding mGuard patFirst guardExpr DebugPointAtBinding.NoneAtSticky guardExpr.Range
+                // __whileLoop ()
+                let loopCall =
+                    mkSynApp1 (SynExpr.Ident idLoop) (SynExpr.Const(SynConst.Unit, mGuard)) mGuard
 
                 // builder.Delay(fun () -> __whileLoop ()) or just __whileLoop ()
                 let delayedLoopCall =
@@ -1651,22 +1651,7 @@ let rec TryTranslateComputationExpression
                             Trivia = SynLetOrUseTrivia.Zero
                         }
 
-                let binding =
-                    mkSynLetBangBinding mGuard patFirst guardExpr DebugPointAtBinding.NoneAtSticky guardExpr.Range
-
-                SynExpr.LetOrUse
-                    {
-                        IsRecursive = false
-                        // isUse = false,
-                        IsFromSource = true // compiler generated during desugaring
-                        // isBang = true,
-                        Bindings = [ binding ]
-                        Body = body
-                        Range = mGuard
-                        Trivia = SynLetOrUseTrivia.Zero
-                    }
-
-            TryTranslateComputationExpression ceenv CompExprTranslationPass.Initial q varSpace rewrittenWhileExpr translatedCtxt
+                Some(translatedCtxt whileExpr)
 
         | SynExpr.TryFinally(innerComp, unwindExpr, _mTryToLast, spTry, spFinally, trivia) ->
 
@@ -2848,7 +2833,22 @@ and TranslateComputationExpressionBind
 
     let innerRange = innerComp.Range
 
-    let innerCompReturn = convertSimpleReturnToExpr ceenv comp varSpace innerComp
+    // Detect if consumePat is a unit pattern — this means the binding came from a do! desugaring.
+    // When the continuation is unit->unit (from do! producing `let! () = e in return ()`),
+    // BindReturn would create BindReturn(e, fun () -> ()) which has type unit->unit.
+    // If the builder's BindReturn expects a non-unit continuation (e.g. Expr -> Expr),
+    // this causes FS0001. Fall back to Bind + Return in this case, which correctly
+    // selects the unit-continuation Bind overload (e.g. Bind(M, unit -> M)).
+    let isUnitPatBinding =
+        match consumePat with
+        | SynPat.Const(SynConst.Unit, _) -> true
+        | _ -> false
+
+    let innerCompReturn =
+        if
+            ceenv.cenv.g.langVersion.SupportsFeature LanguageFeature.AndBang
+            && not isUnitPatBinding
+        then
             convertSimpleReturnToExpr ceenv comp varSpace innerComp
         else
             None
