@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - features/ce-desugar
-      - claude/adoring-meitner-3oy6pn
   workflow_dispatch:
     inputs:
       publish:
