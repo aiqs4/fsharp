@@ -107,7 +107,7 @@ type QueryBuilder() =
     member _.Head (source: QuerySource<'T, 'Q>) =
         Enumerable.First source.Source
 
-    member _.Nth (source: QuerySource<'T, 'Q>, index) =
+    member _.Nth (source: QuerySource<'T, 'Q>, index: int) =
         Enumerable.ElementAt (source.Source, index)
 
     // member _.Nth (source: QuerySource<'T, 'Q>, index: System.Index) =
@@ -119,7 +119,7 @@ type QueryBuilder() =
     member _.SkipWhile (source: QuerySource<'T, 'Q>, predicate) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.SkipWhile (source.Source, Func<_, _>(predicate)))
 
-    member _.Take (source: QuerySource<'T, 'Q>, count) : QuerySource<'T, 'Q> =
+    member _.Take (source: QuerySource<'T, 'Q>, count: int) : QuerySource<'T, 'Q> =
         QuerySource (Enumerable.Take (source.Source, count))
 
     // member _.Take (source: QuerySource<'T, 'Q>, range: System.Range) : QuerySource<'T, 'Q> =
@@ -481,8 +481,8 @@ module Query =
         MakeOrCallContainsOrElementAt FQ FE
 
     let MakeElementAt, CallElementAt =
-        let FQ = methodhandleof (fun (x, y) -> Queryable.ElementAt(x, y))
-        let FE = methodhandleof (fun (x, y) -> Enumerable.ElementAt(x, y))
+        let FQ = methodhandleof (fun (x, (y: int)) -> Queryable.ElementAt(x, y))
+        let FE = methodhandleof (fun (x, (y: int)) -> Enumerable.ElementAt(x, y))
         MakeOrCallContainsOrElementAt FQ FE
 
     let MakeOrCallMinByOrMaxBy FQ FE =
@@ -892,8 +892,8 @@ module Query =
 
     let MakeTake =
         MakeSkipOrTake
-            (methodhandleof (fun (x, y) -> Queryable.Take (x, y)))
-            (methodhandleof (fun (x, y) -> Enumerable.Take (x, y)))
+            (methodhandleof (fun (x, (y: int)) -> Queryable.Take (x, y)))
+            (methodhandleof (fun (x, (y: int)) -> Enumerable.Take (x, y)))
 
     let MakeSkipWhile =
         GenMakeSkipWhileOrTakeWhile

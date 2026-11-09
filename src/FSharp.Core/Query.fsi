@@ -384,8 +384,15 @@ namespace Microsoft.FSharp.Linq
         /// </summary>
         /// 
         /// <example-tbd></example-tbd>
-        [<CustomOperation("take",MaintainsVariableSpace=true,AllowIntoPattern=true)>] 
-        member Take: source:QuerySource<'T,'Q> * count:int-> QuerySource<'T,'Q>
+        [<CustomOperation("take", MaintainsVariableSpace=true, AllowIntoPattern=true)>] 
+        member Take: source: QuerySource<'T, 'Q> * count: int -> QuerySource<'T, 'Q>
+
+        // /// <summary>A query operator that selects a specified range of elements from those selected so far (using System.Range for .NET 10+).
+        // /// </summary>
+        // /// 
+        // /// <example-tbd></example-tbd>
+        // [<CustomOperation("take", MaintainsVariableSpace=true, AllowIntoPattern=true)>] 
+        // member Take: source: QuerySource<'T, 'Q> * range: System.Range -> QuerySource<'T, 'Q>
 
         /// <summary>A query operator that selects elements from a sequence as long as a specified condition is true, and then skips the remaining elements.
         /// </summary>

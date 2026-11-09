@@ -445,23 +445,6 @@ namespace System.Diagnostics.CodeAnalysis
             this.MemberTypes <- memberTypes
 #endif
 
-#if !NET7_0_OR_GREATER
-namespace System.Diagnostics.CodeAnalysis
-
-    open System
-    open Microsoft.FSharp.Core
-
-    /// <summary>
-    /// Indicates that the specified member requires the ability to generate new code at runtime.
-    /// </summary>
-    [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Constructor ||| AttributeTargets.Method,
-                     Inherited = false)>]
-    type internal RequiresDynamicCodeAttribute (message: string) =
-        inherit Attribute ()
-
-        member _.Message = message
-
-#endif
 
 namespace Microsoft.FSharp.Core
     open System
@@ -469,7 +452,6 @@ namespace Microsoft.FSharp.Core
     open System.Collections.Generic
     open System.Globalization
     open System.Reflection
-    // #endif
 
     [<MeasureAnnotatedAbbreviation>] type float<[<Measure>] 'Measure> = float 
     [<MeasureAnnotatedAbbreviation>] type float32<[<Measure>] 'Measure> = float32
@@ -4135,6 +4117,7 @@ namespace System.Runtime.CompilerServices
         inherit Attribute ()
 #endif
 
+
 namespace Microsoft.FSharp.Collections
 
     //-------------------------------------------------------------------------
@@ -4151,7 +4134,7 @@ namespace Microsoft.FSharp.Collections
     open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicFunctions
     open Microsoft.FSharp.Core.BasicInlinedOperations
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     [<System.Runtime.CompilerServices.CollectionBuilder(typeof<List>, "Create")>]
 #endif
     [<DefaultAugmentation(false)>]
@@ -4179,7 +4162,7 @@ namespace Microsoft.FSharp.Collections
         
     and 'T list = List<'T>
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     and [<CompilerMessage("This type is for compiler use and should not be used directly", 1204, IsHidden=true);
           Sealed;
           AbstractClass;
@@ -7326,7 +7309,7 @@ namespace Microsoft.FSharp.Control
     open Microsoft.FSharp.Core
     open Microsoft.FSharp.Core.Operators
 
-    module LazyExtensions =
+    module LazyExtensions = 
 #if NET7_0_OR_GREATER
         type Lazy<[<DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicParameterlessConstructor)>]'T> with
 #else

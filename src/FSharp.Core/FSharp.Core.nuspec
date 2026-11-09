@@ -5,7 +5,6 @@
         <language>en-US</language>
         <dependencies>
             <group targetFramework=".NET10.0" />
-            <group targetFramework="$FSharpCoreShippedNetTargetFramework$" />
         </dependencies>
     </metadata>
     <files>
@@ -16,11 +15,5 @@
 
         <!-- resources -->
         <file src="FSharp.Core\$Configuration$\net10.0\**\FSharp.Core.resources.dll" target="lib\net10.0" />
-
-        <file src="FSharp.Core\$Configuration$\$FSharpCoreShippedNetTargetFramework$\FSharp.Core.dll" target="lib\$FSharpCoreShippedNetTargetFramework$" />
-        <file src="FSharp.Core\$Configuration$\$FSharpCoreShippedNetTargetFramework$\FSharp.Core.xml" target="lib\$FSharpCoreShippedNetTargetFramework$" />
-
-        <!-- resources -->
-        <file src="FSharp.Core\$Configuration$\$FSharpCoreShippedNetTargetFramework$\**\FSharp.Core.resources.dll" target="lib\$FSharpCoreShippedNetTargetFramework$" />
     </files>
 </package>

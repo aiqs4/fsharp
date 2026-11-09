@@ -4,12 +4,7 @@
 
   <PropertyGroup>
     <OutputType>Library</OutputType>
-    <TargetFrameworks Condition="'$(Configuration)' == 'Proto'">netstandard2.0</TargetFrameworks>
-    <TargetFrameworks Condition="'$(Configuration)' != 'Proto'">netstandard2.0;netstandard2.1</TargetFrameworks>
-    <TargetFrameworks Condition="'$(Configuration)' != 'Proto'">netstandard2.0;netstandard2.1;$(FSharpCoreShippedNetTargetFramework)</TargetFrameworks>
-    <!-- Support net10.0 with strict null checking PLUS legacy frameworks for compatibility -->
-    <TargetFrameworks>net10.0</TargetFrameworks>
-    <TargetFrameworks>$(FSharpCoreShippedNetTargetFramework)</TargetFrameworks>
+    <!-- Product TFM is the single source of truth (eng/TargetFrameworks.props); the nuspec lib/ paths must match it. -->
     <TargetFrameworks>$(FSharpNetCoreProductTargetFramework)</TargetFrameworks>
     <NoWarn>$(NoWarn);75</NoWarn> <!-- InternalCommandLineOption -->
     <NoWarn>$(NoWarn);1204</NoWarn> <!-- This construct is for use in the FSharp.Core library and should not be used directly -->
@@ -41,7 +36,6 @@
     <Configurations>Debug;Release;Proto</Configurations>
   </PropertyGroup>
 
-    <!-- .FSharp.Core always uses the old style initialization mechanism because of SQL CLR requirements -->
   <!-- .FSharp.Core always uses the old style initialization mechanism because of SQL CLR requirements -->
   <PropertyGroup Condition="'$(BUILDING_USING_DOTNET)' != 'true' and '$(Configuration)' != 'Proto'">
     <OtherFlags>$(OtherFlags) --realsig-</OtherFlags>
@@ -69,9 +63,6 @@
       <Link>FSCore.resx</Link>
     </EmbeddedResource>
     <EmbeddedResource Include="ILLink.Substitutions.xml" LogicalName="ILLink.Substitutions.xml" />
-  </ItemGroup>
-  <ItemGroup Condition="'$(Configuration)' == 'Proto' or '$(BUILDING_USING_DOTNET)' == 'true'">
-    <!-- This can be removed once CompileBefore support is shipped in an rtm release -->
     <CompileBefore Include="prim-types-prelude.fsi">
       <Link>Primitives/prim-types-prelude.fsi</Link>
     </CompileBefore>

@@ -1049,24 +1049,6 @@ namespace System.Diagnostics.CodeAnalysis
         member MemberTypes: DynamicallyAccessedMemberTypes
 #endif
 
-#if !NET7_0_OR_GREATER
-namespace System.Diagnostics.CodeAnalysis
-
-    open System
-    open Microsoft.FSharp.Core
-
-    /// <summary>
-    /// Indicates that the specified member requires the ability to generate new code at runtime.
-    /// </summary>
-    [<AttributeUsage(AttributeTargets.Class ||| AttributeTargets.Constructor ||| AttributeTargets.Method,
-                     Inherited = false)>]
-    type internal RequiresDynamicCodeAttribute =
-        inherit Attribute
-        new: string -> RequiresDynamicCodeAttribute
-        member Message: string
-
-#endif
-
 namespace Microsoft.FSharp.Core
 
     open System
@@ -2676,7 +2658,7 @@ namespace Microsoft.FSharp.Collections
     /// </remarks>
     ///
     /// <exclude />
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     [<System.Runtime.CompilerServices.CollectionBuilder(typeof<List>, "Create")>]
 #endif
     [<DefaultAugmentation(false)>]
@@ -2752,7 +2734,7 @@ namespace Microsoft.FSharp.Collections
     /// </remarks>
     and 'T list = List<'T>
 
-#if NETSTANDARD2_1_OR_GREATER
+#if NETSTANDARD2_1_OR_GREATER || NETCOREAPP2_1_OR_GREATER || NET5_0_OR_GREATER || NET10_0_OR_GREATER
     /// <summary>Contains methods for compiler use related to lists.</summary>
     and [<CompilerMessage("This type is for compiler use and should not be used directly", 1204, IsHidden=true);
           Sealed;
