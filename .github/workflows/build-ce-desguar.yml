@@ -6,9 +6,15 @@ on:
       - features/ce-desugar
       - claude/adoring-meitner-3oy6pn
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the packages to GitHub Packages
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+  packages: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -57,3 +63,31 @@ jobs:
             artifacts/release/**
           if-no-files-found: error
           retention-days: 14
+
+      # Guards the packaging layout: a nuspec that points at a missing/undefined TFM
+      # still packs, but yields an empty lib/ folder.
+      - name: Verify NuGet packages
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for id in FSharp.Core FSharp.Compiler.Service; do
+            pkgs=(artifacts/nupkg/"$id".[0-9]*.nupkg)
+            (( ${#pkgs[@]} == 1 )) || { echo "::error::expected exactly one $id package, found ${#pkgs[@]}"; exit 1; }
+            echo "== ${pkgs[0]}"; unzip -l "${pkgs[0]}" | grep -E 'lib/[^/]+/[^/]+\.dll' || { echo "::error::${pkgs[0]} contains no lib/<tfm>/*.dll"; exit 1; }
+          done
+
+      # Same GITHUB_TOKEN feed that fsharp-wasm's release workflow uses. Only for the
+      # real branch (or an explicit dispatch) so experimental branches don't pollute the feed.
+      # NB: --skip-duplicate makes re-pushing an identical version a silent no-op.
+      - name: Publish to GitHub Packages
+        if: github.ref == 'refs/heads/features/ce-desugar' || (github.event_name == 'workflow_dispatch' && inputs.publish)
+        env:
+          FEED: https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json
+          GH_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          nix develop .#ci --command bash -euo pipefail -c '
+            dotnet nuget add source "$FEED" --name github \
+              --username "$GH_ACTOR" --password "$GH_TOKEN" --store-password-in-clear-text >/dev/null 2>&1 || true
+            dotnet nuget push "artifacts/nupkg/*.nupkg" --source github --api-key "$GH_TOKEN" --skip-duplicate
+          '
