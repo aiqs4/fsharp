@@ -420,13 +420,15 @@ step_publish_nuget() {
     log "Packing $name..."
 
     local -A p=()
-    local k v
-    while IFS='=' read -r k v; do p[$k]=$v; done < <(
-      # -nologo drops the version banner; awk starts at the first '{' so any stray warning line cannot break jq
-      dotnet msbuild -nologo "$REPO_ROOT/$proj" -c "$CONFIGURATION" "${BUILD_PROPS[@]}" \
-        "-getProperty:PackageId,PackageDescription,PackageTags,NuspecFile,$verprop" \
-      | awk '/^\{/ {j=1} j' \
-      | jq -r '.Properties | to_entries[] | "\(.key)=\(.value)"')
+    local k v json
+    # NB: `dotnet msbuild` takes MSBuild switches (-p:Configuration=...), not `dotnet build` ones (-c ...).
+    json=$(dotnet msbuild -nologo "$REPO_ROOT/$proj" "-p:Configuration=$CONFIGURATION" "${BUILD_PROPS[@]}" \
+             "-getProperty:PackageId,PackageDescription,PackageTags,NuspecFile,$verprop" 2>&1) \
+      || error "$name: could not evaluate the package metadata:"$'\n'"$json"
+    # keep only the JSON object (first '{' .. closing '}') so stray warning lines cannot break jq
+    json=$(printf '%s\n' "$json" | awk '/^\{/ {j=1} j {print} j && /^\}/ {exit}')
+    [[ -n "$json" ]] || error "$name: msbuild returned no properties"
+    while IFS='=' read -r k v; do p[$k]=$v; done < <(printf '%s\n' "$json" | jq -r '.Properties | to_entries[] | "\(.key)=\(.value)"')
 
     local version="${p[$verprop]:-}"
     [[ -n "$version" ]] || error "$name: $verprop is empty (see eng/Versions.props)"
