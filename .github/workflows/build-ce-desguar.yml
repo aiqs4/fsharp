@@ -47,6 +47,9 @@ jobs:
 
       - name: Build compiler and NuGet packages
         shell: bash
+        env:
+          # distinct prerelease per CI run (11.0.101-ce-desugar.<n>), so GitHub Packages never keeps a stale version
+          FSHARP_PACKAGE_SUFFIX: ce-desugar.${{ github.run_number }}
         run: |
           nix develop .#ci --command bash -euo pipefail -c '
             dotnet --info

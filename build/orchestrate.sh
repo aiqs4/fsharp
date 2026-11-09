@@ -392,26 +392,74 @@ step_publish_exe() {
 }
 
 # ── Step: pack NuGet ──────────────────────────────────────────────────────────
+# Arcade normally expands $CommonMetadataElements$/$CommonFileElements$ in the .nuspec files and supplies
+# NuspecBasePath, license and version. It is not imported under BUILDING_USING_DOTNET (DISABLE_ARCADE), so the
+# nuspec is expanded here. Versions come from eng/Versions.props; FSHARP_PACKAGE_SUFFIX (e.g. "ce-desugar.42")
+# turns every CI build into a distinct prerelease, so a feed can never silently keep a stale package.
+
+xml_escape() { local s=$1; s=${s//&/&amp;}; s=${s//</&lt;}; s=${s//>/&gt;}; s=${s//\"/&quot;}; printf '%s' "$s"; }
 
 step_publish_nuget() {
   log_section "Pack NuGet"
-  local out="$ARTIFACTS/nupkg"
-  mkdir -p "$out" "$ARTIFACTS/log"
+  command -v jq >/dev/null 2>&1 || error "jq is required to read the package metadata"
+  shopt -u patsub_replacement 2>/dev/null || true   # bash >= 5.2: '&' in a replacement would mean "the match"
+  local out="$ARTIFACTS/nupkg" gen="$ARTIFACTS/nuspec"
+  mkdir -p "$out" "$gen" "$ARTIFACTS/log"
 
-  declare -A packages=(
-    [FSharp.Core]="src/FSharp.Core/FSharp.Core.fsproj"
-    [FSharp.Compiler.Service]="src/Compiler/FSharp.Compiler.Service.fsproj"
+  # name | project | version property in eng/Versions.props
+  local -a packages=(
+    "FSharp.Core|src/FSharp.Core/FSharp.Core.fsproj|FSCorePackageVersionValue"
+    "FSharp.Compiler.Service|src/Compiler/FSharp.Compiler.Service.fsproj|FSharpCompilerServicePackageVersion"
   )
+  local repo_url="${GITHUB_SERVER_URL:-https://github.com}/${GITHUB_REPOSITORY:-dotnet/fsharp}"
+  local authors="${PACKAGE_AUTHORS:-Microsoft, F# Software Foundation and contributors (CE-desugar fork)}"
 
-  for name in "${!packages[@]}"; do
+  local entry name proj verprop
+  for entry in "${packages[@]}"; do
+    IFS='|' read -r name proj verprop <<<"$entry"
     log "Packing $name..."
+
+    local -A p=()
+    local k v
+    while IFS='=' read -r k v; do p[$k]=$v; done < <(
+      dotnet msbuild "$REPO_ROOT/$proj" -c "$CONFIGURATION" "${BUILD_PROPS[@]}" \
+        "-getProperty:PackageId,PackageDescription,PackageTags,NuspecFile,$verprop" \
+      | jq -r '.Properties | to_entries[] | "\(.key)=\(.value)"')
+
+    local version="${p[$verprop]:-}"
+    [[ -n "$version" ]] || error "$name: $verprop is empty (see eng/Versions.props)"
+    [[ -n "${FSHARP_PACKAGE_SUFFIX:-}" ]] && version="$version-$FSHARP_PACKAGE_SUFFIX"
+    local template; template="$(dirname "$REPO_ROOT/$proj")/${p[NuspecFile]:?NuspecFile not set for $name}"
+    [[ -f "$template" ]] || error "$name: nuspec template not found: $template"
+
+    local meta
+    meta="<id>$(xml_escape "${p[PackageId]:-$name}")</id>
+        <version>$(xml_escape "$version")</version>
+        <authors>$(xml_escape "$authors")</authors>
+        <owners>$(xml_escape "$authors")</owners>
+        <requireLicenseAcceptance>false</requireLicenseAcceptance>
+        <description>$(xml_escape "${p[PackageDescription]:-$name}")</description>
+        <license type=\"expression\">MIT</license>
+        <projectUrl>$(xml_escape "$repo_url")</projectUrl>
+        <tags>$(xml_escape "${p[PackageTags]:-F# fsharp functional programming}")</tags>
+        <repository type=\"git\" url=\"$(xml_escape "$repo_url")\" />"
+
+    local tpl; tpl=$(<"$template")
+    tpl=${tpl//'$CommonMetadataElements$'/"$meta"}
+    tpl=${tpl//'$CommonFileElements$'/}
+    printf '%s\n' "$tpl" > "$gen/$name.nuspec"
+
     local -a bl=()
     [[ "$BINARY_LOG" == "true" ]] && bl+=("-bl:$ARTIFACTS/log/pack-${name}.binlog")
-    dn pack "$REPO_ROOT/${packages[$name]}" \
+    dn pack "$REPO_ROOT/$proj" \
       -c "$CONFIGURATION" \
       -o "$out" \
       --no-restore \
       -v "$(verbosity)" \
+      "/p:NuspecFile=$gen/$name.nuspec" \
+      "/p:NuspecBasePath=$ARTIFACTS/bin" \
+      "/p:NuspecProperties=Configuration=$CONFIGURATION" \
+      "/p:PackageVersion=$version" \
       "${BUILD_PROPS[@]}" ${bl[@]+"${bl[@]}"} \
     || error "$name pack failed"
   done

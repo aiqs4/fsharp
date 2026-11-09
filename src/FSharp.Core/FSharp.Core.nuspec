@@ -4,7 +4,7 @@
         $CommonMetadataElements$
         <language>en-US</language>
         <dependencies>
-            <group targetFramework=".NET10.0" />
+            <group targetFramework="net10.0" />
         </dependencies>
     </metadata>
     <files>
