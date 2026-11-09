@@ -240,10 +240,17 @@ step_build_compiler() {
   || { skip "compiler (src unchanged)"; return 0; }
 
   log_section "Compiler ($CONFIGURATION / $TARGET_FRAMEWORK)"
-  # Product projects only (fsc/fsi pull in FCS, FSharp.Core, FSharp.Build, DependencyManager, Interactive.Settings).
+  # Product projects only: fsc/fsi pull in FCS, FSharp.Build, DependencyManager and Interactive.Settings.
+  # FSharp.Core is listed explicitly: with BUILDING_USING_DOTNET=true the projects consume the *shipped*
+  # FSharp.Core package (FSHARPCORE_USE_PACKAGE), so building fsc/fsi does not build FSharp.Core.fsproj, which
+  # is itself a deliverable (and one of the NuGet packages).
   # FSharp.slnx also contains every test project; those have their own step (tests-build) and must not be able
   # to fail the compiler/publish pipeline. Set BUILD_FULL_SOLUTION=true to build the whole solution anyway.
-  local -a targets=("$REPO_ROOT/src/fsc/fscProject/fsc.fsproj" "$REPO_ROOT/src/fsi/fsiProject/fsi.fsproj")
+  local -a targets=(
+    "$REPO_ROOT/src/FSharp.Core/FSharp.Core.fsproj"
+    "$REPO_ROOT/src/fsc/fscProject/fsc.fsproj"
+    "$REPO_ROOT/src/fsi/fsiProject/fsi.fsproj"
+  )
   [[ "${BUILD_FULL_SOLUTION:-false}" == "true" ]] && targets=("$MAIN_SLN")
   local target
   for target in "${targets[@]}"; do
