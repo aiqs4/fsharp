@@ -196,8 +196,14 @@ step_bootstrap() {
   log_section "Bootstrap (Configuration=Proto, $TARGET_FRAMEWORK)"
 
   local -a bl=(); [[ "$BINARY_LOG" == "true" ]] && bl+=("-bl")
+  # BUILDING_USING_DOTNET must be pinned: Directory.Build.props auto-enables it as soon as
+  # artifacts/Bootstrap/fsc/fsc.dll exists. In a clean checkout that happens *between* projects
+  # (fsc publishes it, fsi is built after), so fsi would be restored with the flag off but built with
+  # it on (FSHARPCORE_USE_PACKAGE, output paths, ...) => NETSDK1047. Incremental local builds never
+  # see the flip because the file already exists.
   dotnet publish "$PROTO_PROJ" \
     -c Proto \
+    /p:BUILDING_USING_DOTNET=false \
     /p:FSharpNetCoreProductTargetFramework="$TARGET_FRAMEWORK" \
     /p:DotNetBuild=false \
     /p:DotNetBuildSourceOnly=false \
