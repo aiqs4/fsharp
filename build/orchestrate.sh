@@ -376,8 +376,10 @@ step_publish_exe() {
     log "Publishing $tool..."
     local -a bl=()
     [[ "$BINARY_LOG" == "true" ]] && bl+=("-bl:$ARTIFACTS/log/publish-${tool}.binlog")
+    # -f is required: these projects use TargetFrameworks (plural), and `publish` refuses to run without one (NETSDK1129).
     dn publish "$REPO_ROOT/${tools[$tool]}" \
       -c "$CONFIGURATION" \
+      -f "$TARGET_FRAMEWORK" \
       -o "$out/$tool" \
       /p:SelfContained=false \
       --no-restore \
