@@ -422,8 +422,10 @@ step_publish_nuget() {
     local -A p=()
     local k v
     while IFS='=' read -r k v; do p[$k]=$v; done < <(
-      dotnet msbuild "$REPO_ROOT/$proj" -c "$CONFIGURATION" "${BUILD_PROPS[@]}" \
+      # -nologo drops the version banner; awk starts at the first '{' so any stray warning line cannot break jq
+      dotnet msbuild -nologo "$REPO_ROOT/$proj" -c "$CONFIGURATION" "${BUILD_PROPS[@]}" \
         "-getProperty:PackageId,PackageDescription,PackageTags,NuspecFile,$verprop" \
+      | awk '/^\{/ {j=1} j' \
       | jq -r '.Properties | to_entries[] | "\(.key)=\(.value)"')
 
     local version="${p[$verprop]:-}"
