@@ -240,12 +240,20 @@ step_build_compiler() {
   || { skip "compiler (src unchanged)"; return 0; }
 
   log_section "Compiler ($CONFIGURATION / $TARGET_FRAMEWORK)"
-  dn build "$MAIN_SLN" \
-    -c "$CONFIGURATION" \
-    --no-restore \
-    -v "$(verbosity)" \
-    "${BUILD_PROPS[@]}" \
-  || error "Compiler build failed"
+  # Product projects only (fsc/fsi pull in FCS, FSharp.Core, FSharp.Build, DependencyManager, Interactive.Settings).
+  # FSharp.slnx also contains every test project; those have their own step (tests-build) and must not be able
+  # to fail the compiler/publish pipeline. Set BUILD_FULL_SOLUTION=true to build the whole solution anyway.
+  local -a targets=("$REPO_ROOT/src/fsc/fscProject/fsc.fsproj" "$REPO_ROOT/src/fsi/fsiProject/fsi.fsproj")
+  [[ "${BUILD_FULL_SOLUTION:-false}" == "true" ]] && targets=("$MAIN_SLN")
+  local target
+  for target in "${targets[@]}"; do
+    dn build "$target" \
+      -c "$CONFIGURATION" \
+      --no-restore \
+      -v "$(verbosity)" \
+      "${BUILD_PROPS[@]}" \
+    || error "Compiler build failed ($(basename "$target"))"
+  done
 
   step_verify_compiler
   stamp_touch "compiler"
