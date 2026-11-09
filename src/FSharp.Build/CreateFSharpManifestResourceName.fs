@@ -4,6 +4,7 @@ namespace FSharp.Build
 
 open System
 open System.IO
+open FSharp.Compiler.Interop
 open Microsoft.Build.Tasks
 
 type CreateFSharpManifestResourceName public () =

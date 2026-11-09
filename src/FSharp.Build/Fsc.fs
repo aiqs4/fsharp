@@ -74,15 +74,16 @@ type public Fsc() as this =
     let mutable targetType: string | null = null
 
     let defaultToolPath =
-        let locationOfThisDll =
+        let l =
             try
-                Some(Path.GetDirectoryName(typeof<Fsc>.Assembly.Location))
+                Path.getDirectoryName (typeof<Fsc>.Assembly.Location)
             with _ ->
                 None
 
-        match FSharpEnvironment.BinFolderOfDefaultFSharpCompiler(locationOfThisDll) with
-        | Some s -> s
-        | None -> ""
+        match FSharpEnvironment.BinFolderOfDefaultFSharpCompiler l with
+        | Some s when not (String.isNullOrEmpty s) -> s
+        | _ -> ""
+
 
     let mutable treatWarningsAsErrors: bool = false
     let mutable useStandardResourceNames: bool = false
@@ -731,7 +732,7 @@ type public Fsc() as this =
         if defaultToolPath = "" then
             raise (new System.InvalidOperationException(FSBuild.SR.toolpathUnknown ()))
 
-        System.IO.Path.Combine(defaultToolPath, fsc.ToolExe)
+        Path.combine2 defaultToolPath fsc.ToolExe
 
     override fsc.LogToolCommand(message: string) =
         fsc.Log.LogMessageFromText(message, MessageImportance.Normal) |> ignore

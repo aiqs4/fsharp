@@ -5,6 +5,7 @@ namespace FSharp.Build
 open System
 open System.IO
 open System.Text
+open FSharp.Compiler.Interop
 open Microsoft.Build.Framework
 open Microsoft.Build.Utilities
 
@@ -79,8 +80,8 @@ type GenerateILLinkSubstitutions() =
             let outputFileName =
                 Path.combine2 this.IntermediateOutputPath "ILLink.Substitutions.xml"
 
-            Directory.CreateDirectory(this.IntermediateOutputPath) |> ignore
-            File.WriteAllText(outputFileName, xmlContent)
+            Directory.create this.IntermediateOutputPath
+            File.writeAllText outputFileName xmlContent
 
             // Create a TaskItem for the generated file
             let item = TaskItem(outputFileName) :> ITaskItem

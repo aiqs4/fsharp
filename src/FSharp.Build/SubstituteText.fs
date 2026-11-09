@@ -62,7 +62,7 @@ type SubstituteText() =
                             item.ItemSpec <- targetPath
 
                             // Transform file
-                            let mutable contents = File.ReadAllText(sourcePath)
+                            let mutable contents = File.readAllText sourcePath
 
                             if not (String.IsNullOrWhiteSpace(pattern1)) then
                                 let replacement = item.GetMetadata("Replacement1")
@@ -72,12 +72,12 @@ type SubstituteText() =
                                 let replacement = item.GetMetadata("Replacement2")
                                 contents <- contents.Replace(pattern2, replacement)
 
-                            let directory = Path.GetDirectoryName(targetPath)
+                            let directory = Path.getDirectoryName targetPath |> Option.defaultValue ""
 
                             if not (Directory.Exists(directory)) then
                                 Directory.CreateDirectory(directory) |> ignore
 
-                            File.WriteAllText(targetPath, contents)
+                            File.writeAllText targetPath contents
                         with _ ->
                             ()
 

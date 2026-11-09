@@ -48,7 +48,7 @@ type public Fsi() as this =
     let mutable toolPath: string =
         let locationOfThisDll =
             try
-                Some(Path.GetDirectoryName(typeof<Fsi>.Assembly.Location))
+                Path.getDirectoryName (typeof<Fsi>.Assembly.Location)
             with _ ->
                 None
 
@@ -326,7 +326,7 @@ type public Fsi() as this =
         if toolPath = "" then
             raise (new System.InvalidOperationException(FSBuild.SR.toolpathUnknown ()))
 
-        System.IO.Path.Combine(toolPath, fsi.ToolExe)
+        Path.combine2 toolPath fsi.ToolExe
 
     override fsi.LogToolCommand(message: string) =
         fsi.Log.LogMessageFromText(message, MessageImportance.Normal) |> ignore

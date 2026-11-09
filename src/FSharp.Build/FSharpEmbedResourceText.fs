@@ -398,7 +398,7 @@ open Printf
         try
             let printMessage fmt = Printf.ksprintf this.Log.LogMessage fmt
 
-            let justFileName = Path.GetFileNameWithoutExtension(fileName) // .txt
+            let justFileName = Path.getFileNameWithoutExtension fileName |> Option.defaultValue "" // .txt
 
             if justFileName |> Seq.exists (System.Char.IsLetterOrDigit >> not) then
                 Err(
@@ -409,17 +409,17 @@ open Printf
                         justFileName
                 )
 
-            let outFileName = Path.Combine(_outputPath, justFileName + ".fs")
-            let outFileSignatureName = Path.Combine(_outputPath, justFileName + ".fsi")
-            let outXmlFileName = Path.Combine(_outputPath, justFileName + ".resx")
+            let outFileName = Path.combine2 _outputPath (justFileName + ".fs")
+            let outFileSignatureName = Path.combine2 _outputPath (justFileName + ".fsi")
+            let outXmlFileName = Path.combine2 _outputPath (justFileName + ".resx")
 
-            let condition1 = File.Exists(outFileName)
-            let condition2 = condition1 && File.Exists(outXmlFileName)
-            let condition3 = condition2 && File.Exists(fileName)
+            let condition1 = File.exists outFileName
+            let condition2 = condition1 && File.exists outXmlFileName
+            let condition3 = condition2 && File.exists fileName
 
             let condition4 =
                 condition3
-                && (File.GetLastWriteTimeUtc(fileName) <= File.GetLastWriteTimeUtc(outFileName))
+                && (File.getLastWriteTimeUtc fileName <= File.getLastWriteTimeUtc outFileName)
 
             let condition5 =
                 condition4
@@ -444,7 +444,7 @@ open Printf
                 printMessage "Reading %s" fileName
 
                 let lines =
-                    File.ReadAllLines(fileName)
+                    File.readAllLines fileName
                     |> Array.mapi (fun i s -> i, s) // keep line numbers
                     |> Array.filter (fun (_i, s) -> not (s.StartsWith "#")) // filter out comments
 
@@ -490,9 +490,9 @@ open Printf
                     allStrs.Add(str, (line, ident))
 
                 printMessage "Generating %s" outFileName
-                use outStream = File.Create outFileName
+                use outStream = File.create outFileName
                 use out = new StreamWriter(outStream)
-                use outSignatureStream = File.Create outFileSignatureName
+                use outSignatureStream = File.create outFileSignatureName
                 use outSignature = new StreamWriter(outSignatureStream)
                 fprintfn out "// This is a generated file; the original input is '%s'" fileName
                 fprintfn outSignature "// This is a generated file; the original input is '%s'" fileName
@@ -572,8 +572,9 @@ open Printf
                         if Array.isEmpty holes then
                             sprintf "    static member %s: unit -> %s" ident returnType
                         else
-                            parameters
-                            |> String.concat " * "
+                            holes
+                            |> Array.mapi (fun idx holeType -> sprintf "a%i: %s" idx holeType)
+                            |> FSharp.Core.String.concat " * "
                             |> fun parameters -> sprintf "    static member %s: %s -> %s" ident parameters returnType
 
                     fprintfn outSignature "%s" signatureMember)
@@ -605,7 +606,7 @@ open Printf
                     xnc.AppendChild(xd.CreateTextNode netFormatString) |> ignore
                     xd.LastChild.AppendChild xn |> ignore)
 
-                use outXmlStream = File.Create outXmlFileName
+                use outXmlStream = File.create outXmlFileName
                 xd.Save outXmlStream
                 printMessage "Done %s" outFileName
                 Some(fileName, outFileSignatureName, outFileName, outXmlFileName)
