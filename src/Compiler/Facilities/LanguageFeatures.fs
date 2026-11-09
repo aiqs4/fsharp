@@ -268,7 +268,10 @@ type LanguageVersion(versionText, ?disabledFeaturesArray: LanguageFeature array)
 
                 // F# preview (still preview in 10.0)
                 LanguageFeature.FromEndSlicing, previewVersion // Unfinished features --- needs work
-                LanguageFeature.ExtensionConstraintSolutions, previewVersion
+                LanguageFeature.MethodOverloadsCache, previewVersion // Performance optimization for overload resolution
+                LanguageFeature.ImplicitDIMCoverage, languageVersion110
+                LanguageFeature.ErrorOnMissingSignatureAttribute, previewVersion // Opt-in: turn FS3888 from warning into error
+                LanguageFeature.AccessProtectedBaseFieldFromClosure, previewVersion // #5302: read a protected base field from a closure
                 LanguageFeature.IfBang, previewVersion
                 LanguageFeature.ForBang, previewVersion
                 LanguageFeature.WhileExpr, previewVersion

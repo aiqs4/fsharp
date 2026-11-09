@@ -46,5 +46,4 @@ type SurfaceAreaTest() =
                 (Path.Combine(__SOURCE_DIRECTORY__, "FSharp.Compiler.Service.SurfaceArea.net10.0.bsl"), 
                  "FSharp.Compiler.Service.SurfaceArea.net10.0.bsl")
 
-        let outFileName = Path.Combine(__SOURCE_DIRECTORY__, "FSharp.Compiler.Service.SurfaceArea.net10.0.out")
-        FSharp.Test.SurfaceArea.verify assembly baseline outFileName
+        FSharp.Test.SurfaceArea.verify assembly baseline

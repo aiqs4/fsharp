@@ -1365,7 +1365,7 @@ let rec TryTranslateComputationExpression
 
                             let forCall =
                                 match spFor with
-                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
+                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes(false, mFor), false, forCall)
                                 | DebugPointAtFor.No -> forCall
 
                             translatedCtxt forCall)
@@ -1423,7 +1423,7 @@ let rec TryTranslateComputationExpression
 
                             let forCall =
                                 match spFor with
-                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes mFor, false, forCall)
+                                | DebugPointAtFor.Yes _ -> SynExpr.DebugPoint(DebugPointAtLeafExpr.Yes(false, mFor), false, forCall)
                                 | DebugPointAtFor.No -> forCall
 
                             translatedCtxt forCall)
