@@ -53,6 +53,20 @@ jobs:
             ./build/build.sh --publish -f
           '
 
+      # NETSDK1047-style failures mean restore and build disagreed on TFM/RID; show what restore produced.
+      - name: Diagnose restore assets (on failure)
+        if: failure()
+        shell: bash
+        run: |
+          for p in src/fsc/fscProject src/fsi/fsiProject src/FSharp.Compiler.Interactive.Settings; do
+            echo "== $p/obj"; ls -la "$p/obj" 2>&1 | head -12
+            f="$p/obj/project.assets.json"
+            [ -f "$f" ] && jq -c '{targets: (.targets|keys), frameworks: (.project.frameworks|keys), runtimes: (.project.runtimes // {}|keys), style: .project.restore.projectStyle}' "$f"
+            for d in "$p"/obj/*.nuget.dgspec.json; do
+              [ -f "$d" ] && jq -c '.projects|to_entries[]|{proj:(.key|split("/")|last), fw:(.value.frameworks|keys), rt:(.value.runtimes // {}|keys), cfg:(.value.restore.configFilePaths // []|length)}' "$d"
+            done
+          done
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v7
         with:
